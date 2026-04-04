@@ -1,0 +1,27 @@
+{
+  "name": "dime_cdk",
+  "version": "0.1.0",
+  "bin": {
+    "dime_cdk": "bin/dime_cdk.js"
+  },
+  "scripts": {
+    "clean": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Get-ChildItem -Path bin,lib,test -Include *.js,*.d.ts -Recurse -File | Remove-Item -Force; if (Test-Path cdk.out) { Remove-Item -Recurse -Force cdk.out }\"",
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@types/jest": "^30",
+    "@types/node": "^24.10.1",
+    "jest": "^30",
+    "ts-jest": "^29",
+    "aws-cdk": "2.1117.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.247.0",
+    "constructs": "^10.5.0"
+  }
+}

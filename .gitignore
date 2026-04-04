@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# CDK output
+cdk.out/
+dimeCDK/cdk.out/
+
+# TypeScript / build artifacts
+*.tsbuildinfo
+dist/
+build/
+coverage/
+
+# Generated JS and declarations from local TS compilation
+dimeCDK/bin/*.js
+dimeCDK/bin/*.d.ts
+dimeCDK/lib/*.js
+dimeCDK/lib/*.d.ts
+dimeCDK/test/*.js
+dimeCDK/test/*.d.ts
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
