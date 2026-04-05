@@ -9,14 +9,20 @@
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "synth:dev": "cdk synth -c stage=dev",
+    "synth:prod": "cdk synth -c stage=prod",
+    "deploy:dev": "cdk deploy DimeStack-dev -c stage=dev --require-approval never",
+    "deploy:prod": "cdk deploy DimeStack-prod -c stage=prod --require-approval never"
   },
   "devDependencies": {
     "@types/jest": "^30",
     "@types/node": "^24.10.1",
+    "aws-cdk": "2.1117.0",
+    "esbuild": "^0.25.4",
     "jest": "^30",
     "ts-jest": "^29",
-    "aws-cdk": "2.1117.0",
     "ts-node": "^10.9.2",
     "typescript": "~5.9.3"
   },

@@ -1,0 +1,14 @@
+{
+  "name": "dime-backend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.66.0",
+    "@aws-sdk/client-dynamodb": "^3.887.0",
+    "@aws-sdk/client-secrets-manager": "^3.887.0",
+    "@aws-sdk/lib-dynamodb": "^3.887.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.152"
+  }
+}
