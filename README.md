@@ -1,176 +1,280 @@
-# Dime 💸 — Finanzas conversacionales
+# Dime
 
-App financiera donde el usuario maneja su dinero escribiendo mensajes en lenguaje natural.
+App de finanzas conversacionales enfocada en usuarios con baja experiencia digital. La idea es reemplazar interfaces bancarias complejas por un chat donde el usuario escribe cosas como `enviar 500 a Juan` o `cuanto tengo` y el sistema entiende, valida y responde.
 
----
+## Qué hace el MVP
 
-## Estructura del proyecto
+- Transferencias simuladas con confirmación explícita
+- Consulta de saldo
+- Cajitas de ahorro: crear, depositar y ver progreso
+- Flujo conversacional en español natural
+- Persistencia de sesión por `sessionId`
+- Backend serverless en AWS
 
+La lógica financiera es mock. No hay integración bancaria real.
+
+## Arquitectura actual
+
+Flujo principal:
+
+```text
+App móvil (Expo / React Native)
+  -> POST /message
+API Gateway
+  -> Lambda
+    -> Claude / fallback local
+    -> DynamoDB
+  <- { reply, state }
 ```
-dime/
-├── infrastructure/   ← CDK (infra en AWS)
-├── backend/          ← Lambda Handler + servicios
-└── frontend/         ← Chat UI (HTML/JS)
+
+Componentes actuales:
+
+- Frontend móvil: React Native con Expo Go
+- Backend: AWS Lambda + TypeScript
+- API: API Gateway REST
+- IA: Anthropic Claude
+- Persistencia: DynamoDB
+- Secretos: AWS Secrets Manager
+- Infra: AWS CDK
+
+## Estructura del repo
+
+```text
+Dime/
+├── dimeFrontEnd/
+├── dimeBackend/
+├── dimeCDK/
+├── CONTEXT.md
+├── DEPLOYMENT_PLAN.md
+└── README.md
 ```
 
----
+## API actual
 
-## Setup inicial (una sola vez)
+La API expone dos endpoints públicos:
 
-### 1. Instala prerequisitos
+- `GET /health`
+  - verifica que el API está vivo
+  - responde algo como `{"status":"ok","service":"dime","stage":"dev"}`
+
+- `POST /message`
+  - recibe:
+    - `sessionId`
+    - `message`
+  - responde:
+    - `reply`
+    - `state`
+
+Ejemplo:
+
+```json
+{
+  "sessionId": "test123",
+  "message": "cuanto tengo"
+}
+```
+
+Respuesta esperada:
+
+```json
+{
+  "reply": "Tu saldo: $1500.00 MXN",
+  "state": {
+    "userId": "test123",
+    "balance": 1500
+  }
+}
+```
+
+## Frontend móvil y Expo
+
+El frontend no necesita una stack AWS propia para el MVP.
+
+La app en Expo Go solo necesita conocer la URL del API Gateway del ambiente correspondiente:
+
+- `dev` -> API de desarrollo
+- `prod` -> API de producción
+
+La comunicación recomendada es HTTP normal con `fetch`. No necesitas WebSocket para el MVP actual porque el flujo es request/response y no hay streaming ni push server-to-client.
+
+Ejemplo conceptual desde React Native:
+
+```ts
+const response = await fetch(API_URL, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    sessionId,
+    message,
+  }),
+});
+
+const data = await response.json();
+```
+
+## Ambientes AWS
+
+El CDK está preparado para dos ambientes:
+
+- `dev`
+- `prod`
+
+Cada uno crea recursos separados con prefijo distinto.
+
+Ejemplos:
+
+- `dime-dev-sessions`
+- `dime-prod-sessions`
+- `dime-dev-api`
+- `dime-prod-api`
+- `dime/dev/anthropic-api-key`
+- `dime/prod/anthropic-api-key`
+
+Stacks:
+
+- `DimeStack-dev`
+- `DimeStack-prod`
+
+## Requisitos
+
+- Node.js 20+
+- AWS CLI
+- AWS CDK
+- credenciales AWS configuradas
+
+Verifica:
 
 ```bash
-# Node.js 20 LTS desde https://nodejs.org
-
-# AWS CLI
-brew install awscli        # Mac
-# Windows: https://aws.amazon.com/cli/
-
-# CDK
-npm install -g aws-cdk
-
-# Verifica todo
-node --version   # debe ser v20+
+node --version
 aws --version
 cdk --version
 ```
 
-### 2. Configura credenciales AWS
-
-En la consola de AWS:
-- IAM → Users → Create user → AdministratorAccess
-- Security credentials → Create access key
+## Instalar dependencias
 
 ```bash
-aws configure
-# AWS Access Key ID: [tu key]
-# AWS Secret Access Key: [tu secret]
-# Default region: us-east-1
-# Output format: json
-```
-
-### 3. Instala dependencias
-
-```bash
-# Backend
-cd dime/backend
+cd dimeBackend
 npm install
 
-# CDK
-cd dime/infrastructure
+cd ../dimeCDK
 npm install
 ```
 
----
+## Deploy manual
 
-## Deploy en AWS
+### Bootstrap
+
+Solo la primera vez por cuenta/región:
 
 ```bash
-cd dime/infrastructure
-
-# Bootstrap CDK (solo la primera vez)
-cdk bootstrap aws://$(aws sts get-caller-identity --query Account --output text)/us-east-1
-
-# Ver qué va a crear
-cdk diff
-
-# Despliega todo
-npm run deploy
+cd dimeCDK
+cdk bootstrap aws://ACCOUNT_ID/us-east-1
 ```
 
-Al terminar verás algo así en la terminal:
+### Desarrollo
 
-```
-✅ DimeStack
-
-Outputs:
-DimeStack.ApiUrl = https://abc123.execute-api.us-east-1.amazonaws.com/prod/
-DimeStack.MessageEndpoint = https://abc123.execute-api.us-east-1.amazonaws.com/prod/message
-DimeStack.AnthropicSecretName = dime/anthropic-api-key
+```bash
+cd dimeCDK
+npm run deploy:dev
 ```
 
----
+### Producción
 
-## Configura tu API Key de Anthropic
+```bash
+cd dimeCDK
+npm run deploy:prod
+```
 
-Después del deploy, ve a AWS Console:
-1. **Secrets Manager** → busca `dime/anthropic-api-key`
-2. **Edit** → reemplaza `REEMPLAZA_CON_TU_API_KEY` con tu key real
-3. Obtén tu key en: https://console.anthropic.com/
+### Synth
 
-O por CLI:
+```bash
+cd dimeCDK
+npm run synth:dev
+npm run synth:prod
+```
+
+## Configurar Anthropic
+
+Después del deploy, actualiza el secret en AWS Secrets Manager.
+
+Secrets por ambiente:
+
+- `dime/dev/anthropic-api-key`
+- `dime/prod/anthropic-api-key`
+
+Puedes hacerlo desde consola o CLI:
+
 ```bash
 aws secretsmanager update-secret \
-  --secret-id dime/anthropic-api-key \
+  --secret-id dime/dev/anthropic-api-key \
   --secret-string "sk-ant-api03-TU_KEY_AQUI"
 ```
 
----
+## Probar la API
 
-## Conecta el frontend
-
-Edita `frontend/index.html` línea ~180:
-
-```javascript
-// Reemplaza con tu URL real del output del deploy
-const API_URL = "https://abc123.execute-api.us-east-1.amazonaws.com/prod/message";
-```
-
-Abre `frontend/index.html` directamente en el navegador. ¡Listo!
-
----
-
-## Prueba rápida del API
+### Health
 
 ```bash
-curl -X POST https://TU_URL/prod/message \
-  -H "Content-Type: application/json" \
-  -d '{"sessionId":"test123","message":"hola, cuánto tengo?"}'
+curl https://TU_API.execute-api.us-east-1.amazonaws.com/prod/health
 ```
 
-Respuesta esperada:
-```json
-{
-  "reply": "💳 Tu saldo: $1,500.00 MXN",
-  "state": { "balance": 1500, ... }
-}
+### Message
+
+En PowerShell:
+
+```powershell
+$body = @{
+  sessionId = "test123"
+  message   = "cuanto tengo"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method POST `
+  -Uri "https://TU_API.execute-api.us-east-1.amazonaws.com/prod/message" `
+  -ContentType "application/json" `
+  -Body $body
 ```
 
----
+## CI/CD
 
-## Flujo de una transferencia
+Hay workflows de GitHub Actions para:
 
-```
-Usuario: "enviar 300 a juan"
-  → Claude detecta: { type: "transfer", amount: 300, recipient: "juan" }
-  → Sistema resuelve contacto → Juan García
-  → Responde: "💸 Vas a enviar $300.00 MXN a Juan García. ¿Confirmas?"
+- CI en PRs
+- deploy automático de `develop` a `dev`
+- deploy de `main` a `prod`
 
-Usuario: "sí"
-  → Claude detecta: { type: "confirm" }
-  → Se ejecuta la transferencia
-  → Responde: "✅ Transferiste $300.00 MXN a Juan García. Tu nuevo saldo es $1,200.00 MXN."
-```
+Archivos:
 
----
+- `.github/workflows/ci.yml`
+- `.github/workflows/deploy-dev.yml`
+- `.github/workflows/deploy-prod.yml`
 
-## Destruir la infra (para no generar costos)
+GitHub Environments esperados:
 
-```bash
-cd infrastructure
-cdk destroy
-```
+- `dev`
+- `prod`
 
----
+Secrets esperados en cada environment:
 
-## Costo estimado (free tier de AWS)
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION`
+- `ANTHROPIC_API_KEY`
 
-| Recurso | Free tier | Costo hackathon |
-|---------|-----------|-----------------|
-| Lambda | 1M req/mes gratis | $0 |
-| API Gateway | 1M req/mes gratis | $0 |
-| DynamoDB | 25GB + 200M req gratis | $0 |
-| CloudWatch | 5GB logs gratis | $0 |
-| **Claude Haiku** | **NO es free** | ~$0.002/conversación |
+## Notas importantes
 
-Con 500 conversaciones de prueba: ~$1 USD total.
+- `GET /health` puede funcionar aunque la key de Anthropic no sea válida
+- `POST /message` sí depende del secret correcto para los casos que usan Claude
+- hoy no hay autenticación real
+- hoy la app usa datos simulados
+- hoy no se necesita WebSocket para el flujo definido en los BRs
+
+## Costos
+
+Para un hackathon corto, los principales costos probables son:
+
+- Secrets Manager
+- uso de Claude
+
+Lambda, API Gateway y DynamoDB deberían mantenerse muy bajos para tráfico de demo.
