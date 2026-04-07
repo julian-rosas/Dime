@@ -1,11 +1,8 @@
-// handlers/message.ts
-// Handler principal de la Lambda.
-// Recibe: POST /message { sessionId: string, message: string }
-// Devuelve: { reply: string, state: UserState }
-
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { parseIntent, generateConversationalResponse } from "../services/ai";
-import { getSession, saveSession } from "../services/session";
+import { parseJsonBody } from "../../http/request";
+import { respond } from "../../http/response";
+import { parseIntent, generateConversationalResponse } from "../../services/ai";
+import { getSession, saveSession } from "../../services/session";
 import {
   executeTransfer,
   createSavingsGoal,
@@ -13,73 +10,48 @@ import {
   formatBalance,
   resolveContact,
   UserState,
-} from "../services/finance";
+} from "../../services/finance";
 
-// Headers CORS — necesarios para que el frontend React pueda llamar al API
-const CORS_HEADERS = {
-  "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type,Authorization",
-  "Access-Control-Allow-Methods": "POST,OPTIONS",
-};
-
-function respond(statusCode: number, body: object): APIGatewayProxyResult {
-  return {
-    statusCode,
-    headers: CORS_HEADERS,
-    body: JSON.stringify(body),
-  };
-}
-
-export const handler = async (
+export async function handlePostMessage(
   event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> => {
-  // Maneja preflight CORS
-  if (event.httpMethod === "OPTIONS") {
-    return respond(200, {});
-  }
-
+): Promise<APIGatewayProxyResult> {
   let sessionId: string;
   let message: string;
 
   try {
-    const body = JSON.parse(event.body ?? "{}");
-    sessionId = body.sessionId?.trim();
-    message = body.message?.trim();
+    const body = parseJsonBody<{ sessionId?: string; message?: string }>(event);
+    sessionId = body.sessionId?.trim() ?? "";
+    message = body.message?.trim() ?? "";
 
     if (!sessionId || !message) {
       return respond(400, { error: "Se requieren sessionId y message." });
     }
-  } catch {
-    return respond(400, { error: "JSON inválido en el cuerpo de la petición." });
+  } catch (err) {
+    const error =
+      err instanceof Error ? err.message : "JSON inválido en el cuerpo de la petición.";
+    return respond(400, { error });
   }
 
   console.log(`[${sessionId}] Mensaje: "${message}"`);
 
-  // 1. Carga el estado de la sesión del usuario
   const state = await getSession(sessionId);
 
   let reply: string;
-
-  // 2. ¿Hay una operación pendiente de confirmación?
   if (state.pendingOperation) {
     reply = await handlePendingConfirmation(message, state);
   } else {
-    // 3. Parsea la intención con Claude
     const intent = await parseIntent(message, state);
     console.log(`[${sessionId}] Intención detectada:`, intent);
     reply = await handleIntent(intent, message, state);
   }
 
-  // 4. Guarda el estado actualizado
   await saveSession(sessionId, state);
 
   console.log(`[${sessionId}] Respuesta: "${reply}"`);
 
   return respond(200, { reply, state });
-};
+}
 
-// ─── Maneja la confirmación o cancelación de una operación pendiente ─────────
 async function handlePendingConfirmation(
   message: string,
   state: UserState
@@ -113,22 +85,18 @@ async function handlePendingConfirmation(
     return "Operación cancelada. ¿En qué más te puedo ayudar?";
   }
 
-  // No entendió confirm/cancel — recuérdale
   return `${op.description}\n\n¿Confirmas? Escribe *sí* para proceder o *no* para cancelar.`;
 }
 
-// ─── Maneja una intención nueva ──────────────────────────────────────────────
 async function handleIntent(
-  intent: ReturnType<typeof parseIntent> extends Promise<infer T> ? T : never,
+  intent: Awaited<ReturnType<typeof parseIntent>>,
   originalMessage: string,
   state: UserState
 ): Promise<string> {
   switch (intent.type) {
-    // ── Ver saldo ──────────────────────────────────────────────────────────
     case "check_balance":
       return formatBalance(state);
 
-    // ── Transferencia ──────────────────────────────────────────────────────
     case "transfer": {
       if (!intent.amount || !intent.recipient) {
         return "Entendí que quieres transferir, pero necesito saber el monto y a quién. Ejemplo: *enviar 200 a Juan*";
@@ -141,7 +109,6 @@ async function handleIntent(
         return `No tengo a "${intent.recipient}" en tus contactos. ¿Quieres que lo agregue o lo escribiste diferente?`;
       }
 
-      // Guarda operación pendiente y pide confirmación
       state.pendingOperation = {
         type: "transfer",
         amount: intent.amount,
@@ -152,7 +119,6 @@ async function handleIntent(
       return state.pendingOperation.description;
     }
 
-    // ── Crear cajita ───────────────────────────────────────────────────────
     case "savings_create": {
       if (!intent.savingsGoalName || !intent.savingsTarget) {
         return "Para crear una cajita necesito el nombre y la meta. Ejemplo: *quiero ahorrar para vacaciones, meta 3000*";
@@ -168,14 +134,12 @@ async function handleIntent(
       return state.pendingOperation.description;
     }
 
-    // ── Depositar a cajita ─────────────────────────────────────────────────
     case "savings_deposit": {
       if (state.savings.length === 0) {
         return "Aún no tienes cajitas de ahorro. ¿Quieres crear una? Ejemplo: *quiero ahorrar para un celular, meta 5000*";
       }
 
       if (!intent.amount || !intent.savingsGoalId) {
-        // Si solo hay una cajita, úsala automáticamente
         if (state.savings.length === 1 && intent.amount) {
           const goal = state.savings[0];
           state.pendingOperation = {
@@ -206,14 +170,12 @@ async function handleIntent(
       return state.pendingOperation.description;
     }
 
-    // ── Ver cajitas ────────────────────────────────────────────────────────
     case "savings_view":
       if (state.savings.length === 0) {
         return "Aún no tienes cajitas de ahorro. 🐷\n\nCrea una con: *quiero ahorrar para X, meta $Y*";
       }
       return formatBalance(state);
 
-    // ── Ayuda ──────────────────────────────────────────────────────────────
     case "help":
       return [
         "Hola, soy Dime 👋 Puedo ayudarte con:",
@@ -227,10 +189,8 @@ async function handleIntent(
         "¿Con qué empezamos?",
       ].join("\n");
 
-    // ── No se entendió ─────────────────────────────────────────────────────
     case "unknown":
-    default: {
-      // Usa Claude para generar una respuesta conversacional de fallback
+    default:
       try {
         const fallback = await generateConversationalResponse(
           `El usuario de una app de finanzas escribió: "${originalMessage}". No entendiste su intención. Pídele que clarifique de forma amigable, menciona brevemente qué puedes hacer (transferir, ver saldo, ahorrar).`,
@@ -240,6 +200,5 @@ async function handleIntent(
       } catch {
         return `No entendí bien eso 😅\n\nPuedo ayudarte a *transferir dinero*, *ver tu saldo* o *administrar tus ahorros*.\n\nEscribe *ayuda* para ver más opciones.`;
       }
-    }
   }
 }
