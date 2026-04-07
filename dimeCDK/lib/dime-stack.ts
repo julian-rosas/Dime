@@ -11,6 +11,10 @@ export interface DimeStackProps extends cdk.StackProps {
   stage: "dev" | "prod";
 }
 
+function createTableName(prefix: string, suffix: string): string {
+  return `${prefix}-${suffix}`;
+}
+
 export class DimeStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: DimeStackProps) {
     super(scope, id, props);
@@ -22,20 +26,124 @@ export class DimeStack extends cdk.Stack {
     const removalPolicy =
       stage === "prod" ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY;
 
-    const sessionsTable = new dynamodb.Table(this, "DimeSessions", {
-      tableName: `${prefix}-sessions`,
+    // Compatibilidad temporal con el backend actual del MVP.
+    const legacySessionsTable = new dynamodb.Table(this, "DimeLegacySessions", {
+      tableName: createTableName(prefix, "sessions"),
       partitionKey: { name: "sessionId", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       timeToLiveAttribute: "ttl",
       removalPolicy,
     });
 
-    const transactionsTable = new dynamodb.Table(this, "DimeTransactions", {
-      tableName: `${prefix}-transactions`,
+    const usersTable = new dynamodb.Table(this, "DimeUsers", {
+      tableName: createTableName(prefix, "users"),
       partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "timestamp", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy,
+    });
+    usersTable.addGlobalSecondaryIndex({
+      indexName: "phone-index",
+      partitionKey: { name: "phone", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    const authSessionsTable = new dynamodb.Table(this, "DimeAuthSessions", {
+      tableName: createTableName(prefix, "auth-sessions"),
+      partitionKey: { name: "sessionId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: "ttl",
+      removalPolicy,
+    });
+    authSessionsTable.addGlobalSecondaryIndex({
+      indexName: "userId-createdAt-index",
+      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    const conversationsTable = new dynamodb.Table(this, "DimeConversations", {
+      tableName: createTableName(prefix, "conversations"),
+      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "conversationId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy,
+    });
+    conversationsTable.addGlobalSecondaryIndex({
+      indexName: "userId-updatedAt-index",
+      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "updatedAt", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    const conversationMessagesTable = new dynamodb.Table(
+      this,
+      "DimeConversationMessages",
+      {
+        tableName: createTableName(prefix, "conversation-messages"),
+        partitionKey: {
+          name: "conversationId",
+          type: dynamodb.AttributeType.STRING,
+        },
+        sortKey: {
+          name: "createdAtMessageId",
+          type: dynamodb.AttributeType.STRING,
+        },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy,
+      }
+    );
+
+    const userContactsTable = new dynamodb.Table(this, "DimeUserContacts", {
+      tableName: createTableName(prefix, "user-contacts"),
+      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "contactUserId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy,
+    });
+    userContactsTable.addGlobalSecondaryIndex({
+      indexName: "contactUserId-index",
+      partitionKey: { name: "contactUserId", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    const savingsGoalsTable = new dynamodb.Table(this, "DimeSavingsGoals", {
+      tableName: createTableName(prefix, "savings-goals"),
+      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "goalId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy,
+    });
+    savingsGoalsTable.addGlobalSecondaryIndex({
+      indexName: "userId-status-index",
+      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "status", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    const transactionsTable = new dynamodb.Table(this, "DimeTransactions", {
+      tableName: createTableName(prefix, "transactions"),
+      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAtTxId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy,
+    });
+    transactionsTable.addGlobalSecondaryIndex({
+      indexName: "userId-status-index",
+      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "status", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+    transactionsTable.addGlobalSecondaryIndex({
+      indexName: "contactUserId-createdAt-index",
+      partitionKey: { name: "contactUserId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+    transactionsTable.addGlobalSecondaryIndex({
+      indexName: "goalId-createdAt-index",
+      partitionKey: { name: "goalId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
     });
 
     const anthropicSecret = new secretsmanager.Secret(this, "AnthropicApiKey", {
@@ -81,8 +189,14 @@ export class DimeStack extends cdk.Stack {
         },
       }),
       environment: {
-        SESSIONS_TABLE: sessionsTable.tableName,
+        SESSIONS_TABLE: legacySessionsTable.tableName,
         TRANSACTIONS_TABLE: transactionsTable.tableName,
+        USERS_TABLE: usersTable.tableName,
+        AUTH_SESSIONS_TABLE: authSessionsTable.tableName,
+        CONVERSATIONS_TABLE: conversationsTable.tableName,
+        CONVERSATION_MESSAGES_TABLE: conversationMessagesTable.tableName,
+        USER_CONTACTS_TABLE: userContactsTable.tableName,
+        SAVINGS_GOALS_TABLE: savingsGoalsTable.tableName,
         ANTHROPIC_SECRET_ARN: anthropicSecret.secretArn,
         NODE_ENV: "production",
         STAGE: stage,
@@ -92,7 +206,13 @@ export class DimeStack extends cdk.Stack {
       logRetention: logs.RetentionDays.ONE_WEEK,
     });
 
-    sessionsTable.grantReadWriteData(messageHandler);
+    legacySessionsTable.grantReadWriteData(messageHandler);
+    usersTable.grantReadWriteData(messageHandler);
+    authSessionsTable.grantReadWriteData(messageHandler);
+    conversationsTable.grantReadWriteData(messageHandler);
+    conversationMessagesTable.grantReadWriteData(messageHandler);
+    userContactsTable.grantReadWriteData(messageHandler);
+    savingsGoalsTable.grantReadWriteData(messageHandler);
     transactionsTable.grantReadWriteData(messageHandler);
     anthropicSecret.grantRead(messageHandler);
 
@@ -146,6 +266,46 @@ export class DimeStack extends cdk.Stack {
     new cdk.CfnOutput(this, "AnthropicSecretName", {
       value: anthropicSecret.secretName,
       description: "Secret donde se guarda la API key de Anthropic",
+    });
+
+    new cdk.CfnOutput(this, "LegacySessionsTableName", {
+      value: legacySessionsTable.tableName,
+      description: "Tabla legacy de estado conversacional del MVP actual",
+    });
+
+    new cdk.CfnOutput(this, "UsersTableName", {
+      value: usersTable.tableName,
+      description: "Tabla principal de usuarios",
+    });
+
+    new cdk.CfnOutput(this, "AuthSessionsTableName", {
+      value: authSessionsTable.tableName,
+      description: "Tabla de sesiones de autenticacion",
+    });
+
+    new cdk.CfnOutput(this, "ConversationsTableName", {
+      value: conversationsTable.tableName,
+      description: "Tabla menu de conversaciones por usuario",
+    });
+
+    new cdk.CfnOutput(this, "ConversationMessagesTableName", {
+      value: conversationMessagesTable.tableName,
+      description: "Tabla de mensajes por conversacion",
+    });
+
+    new cdk.CfnOutput(this, "UserContactsTableName", {
+      value: userContactsTable.tableName,
+      description: "Tabla de contactos entre usuarios",
+    });
+
+    new cdk.CfnOutput(this, "SavingsGoalsTableName", {
+      value: savingsGoalsTable.tableName,
+      description: "Tabla de cajitas o metas de ahorro",
+    });
+
+    new cdk.CfnOutput(this, "TransactionsTableName", {
+      value: transactionsTable.tableName,
+      description: "Tabla de movimientos financieros",
     });
 
     new cdk.CfnOutput(this, "Stage", {

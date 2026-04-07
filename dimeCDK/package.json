@@ -5,7 +5,7 @@
     "dime_cdk": "bin/dime_cdk.js"
   },
   "scripts": {
-    "clean": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Get-ChildItem -Path bin,lib,test -Include *.js,*.d.ts -Recurse -File | Remove-Item -Force; if (Test-Path cdk.out) { Remove-Item -Recurse -Force cdk.out }\"",
+    "clean": "node -e \"const fs=require('fs'); const path=require('path'); const roots=['bin','lib','test']; const exts=new Set(['.js','.d.ts']); const walk=(dir)=>{ if(!fs.existsSync(dir)) return; for(const entry of fs.readdirSync(dir,{withFileTypes:true})){ const full=path.join(dir,entry.name); if(entry.isDirectory()) walk(full); else if(exts.has(path.extname(entry.name)) || entry.name.endsWith('.d.ts')) fs.rmSync(full,{force:true}); } }; roots.forEach(walk); fs.rmSync('cdk.out',{recursive:true,force:true});\"",
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",
