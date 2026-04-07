@@ -96,7 +96,8 @@ export class DimeStack extends cdk.Stack {
     const transactionsTable = new dynamodb.Table(this, "DimeTransactions", {
       tableName: createTableName(prefix, "transactions"),
       partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "createdAtTxId", type: dynamodb.AttributeType.STRING },
+      // Keep the existing dev stack schema so CloudFormation can update in place.
+      sortKey: { name: "timestamp", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy,
     });
