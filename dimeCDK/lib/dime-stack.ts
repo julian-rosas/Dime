@@ -133,7 +133,7 @@ export class DimeStack extends cdk.Stack {
       { methodResponses: [{ statusCode: "200" }] }
     );
     
-    const userPool = new cognito.UserPool(this, "", {
+    const userPool = new cognito.UserPool(this, "DimeUserPool", {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
