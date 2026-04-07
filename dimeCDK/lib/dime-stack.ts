@@ -109,10 +109,28 @@ export class DimeStack extends cdk.Stack {
       removalPolicy,
     });
 
+    const userPool = new cognito.UserPool(this, "DimeUserPool", {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const appIntegrationClient = userPool.addClient("DimeClient", {
+      userPoolClientName: "DimeWebClient",
+      idTokenValidity: cdk.Duration.days(1),
+      accessTokenValidity: cdk.Duration.days(1),
+      authFlows: {
+        adminUserPassword: true
+      },
+      oAuth: {
+        flows: {authorizationCodeGrant: true},
+        scopes: [cognito.OAuthScope.OPENID]
+      },
+      supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO]
+    });
+
     const messageHandler = new lambda.Function(this, "DimeMessageHandler", {
       functionName: `${prefix}-message-handler`,
       runtime: lambda.Runtime.NODEJS_20_X,
-      handler: "message.handler",
+      handler: "api.handler",
       code: lambda.Code.fromAsset(backendPath, {
         bundling: {
           image: lambda.Runtime.NODEJS_20_X.bundlingImage,
@@ -124,10 +142,10 @@ export class DimeStack extends cdk.Stack {
                 execSync(
                   `npx --prefix "${cdkRoot}" esbuild "${path.join(
                     backendPath,
-                    "handlers/message.ts"
+                    "handlers/api.ts"
                   )}" --bundle --platform=node --target=node20 --outfile="${path.join(
                     outputDir,
-                    "message.js"
+                    "api.js"
                   )}"`,
                   { stdio: "inherit" }
                 );
@@ -140,7 +158,7 @@ export class DimeStack extends cdk.Stack {
           command: [
             "bash",
             "-c",
-            "npx esbuild handlers/message.ts --bundle --platform=node --target=node20 --outfile=/asset-output/message.js",
+            "npx esbuild handlers/api.ts --bundle --platform=node --target=node20 --outfile=/asset-output/api.js",
           ],
         },
       }),
@@ -153,6 +171,8 @@ export class DimeStack extends cdk.Stack {
         CONVERSATION_MESSAGES_TABLE: conversationMessagesTable.tableName,
         USER_CONTACTS_TABLE: userContactsTable.tableName,
         SAVINGS_GOALS_TABLE: savingsGoalsTable.tableName,
+        COGNITO_USER_POOL_ID: userPool.userPoolId,
+        COGNITO_APP_CLIENT_ID: appIntegrationClient.userPoolClientId,
         ANTHROPIC_SECRET_ARN: anthropicSecret.secretArn,
         NODE_ENV: "production",
         STAGE: stage,
@@ -171,6 +191,16 @@ export class DimeStack extends cdk.Stack {
     savingsGoalsTable.grantReadWriteData(messageHandler);
     transactionsTable.grantReadWriteData(messageHandler);
     anthropicSecret.grantRead(messageHandler);
+    messageHandler.addToRolePolicy(
+      new cdk.aws_iam.PolicyStatement({
+        actions: [
+          "cognito-idp:AdminCreateUser",
+          "cognito-idp:AdminInitiateAuth",
+          "cognito-idp:AdminSetUserPassword",
+        ],
+        resources: [userPool.userPoolArn],
+      })
+    );
 
     const api = new apigateway.RestApi(this, "DimeApi", {
       restApiName: `${prefix}-api`,
@@ -180,24 +210,6 @@ export class DimeStack extends cdk.Stack {
         allowMethods: ["POST", "OPTIONS"],
         allowHeaders: ["Content-Type", "Authorization"],
       },
-    });
-    
-    const userPool = new cognito.UserPool(this, "DimeUserPool", {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-
-    const appIntegrationClient = userPool.addClient("DimeClient", {
-      userPoolClientName: "DimeWebClient",
-      idTokenValidity: cdk.Duration.days(1),
-      accessTokenValidity: cdk.Duration.days(1),
-      authFlows: {
-        adminUserPassword: true
-      },
-      oAuth: {
-        flows: {authorizationCodeGrant: true},
-        scopes: [cognito.OAuthScope.OPENID]
-      },
-      supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO]
     });
 
     const jwtHandler = new lambda.Function(this, "DimeJWTHandler", {
@@ -252,6 +264,22 @@ export class DimeStack extends cdk.Stack {
       validationRegex: "^(Bearer )[a-zA-Z0-9\-_]+?\.[a-zA-Z0-9\-_]+?\.([a-zA-Z0-9\-_]+)$"
       });
 
+      const authResource = api.root.addResource("auth");
+      const signupResource = authResource.addResource("signup");
+      signupResource.addMethod(
+        "POST",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        })
+      );
+      const loginResource = authResource.addResource("login");
+      loginResource.addMethod(
+        "POST",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        })
+      );
+
       const messageResource = api.root.addResource("message");
       messageResource.addMethod(
         "POST",
@@ -288,6 +316,26 @@ export class DimeStack extends cdk.Stack {
     new cdk.CfnOutput(this, "MessageEndpoint", {
       value: `${api.url}message`,
       description: "POST endpoint para mensajes",
+    });
+
+    new cdk.CfnOutput(this, "AuthSignupEndpoint", {
+      value: `${api.url}auth/signup`,
+      description: "POST endpoint para registro con Cognito",
+    });
+
+    new cdk.CfnOutput(this, "AuthLoginEndpoint", {
+      value: `${api.url}auth/login`,
+      description: "POST endpoint para login con Cognito",
+    });
+
+    new cdk.CfnOutput(this, "CognitoUserPoolId", {
+      value: userPool.userPoolId,
+      description: "User Pool de Cognito para autenticacion",
+    });
+
+    new cdk.CfnOutput(this, "CognitoAppClientId", {
+      value: appIntegrationClient.userPoolClientId,
+      description: "App Client de Cognito para autenticacion",
     });
 
     new cdk.CfnOutput(this, "AnthropicSecretName", {
