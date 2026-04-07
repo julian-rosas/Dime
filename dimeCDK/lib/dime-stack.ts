@@ -28,7 +28,7 @@ export class DimeStack extends cdk.Stack {
       stage === "prod" ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY;
 
     // Compatibilidad temporal con el backend actual del MVP.
-    const legacySessionsTable = new dynamodb.Table(this, "DimeLegacySessions", {
+    const legacySessionsTable = new dynamodb.Table(this, "DimeSessions", {
       tableName: createTableName(prefix, "sessions"),
       partitionKey: { name: "sessionId", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
