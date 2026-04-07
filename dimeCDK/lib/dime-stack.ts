@@ -49,7 +49,7 @@ export class DimeStack extends cdk.Stack {
     const messageHandler = new lambda.Function(this, "DimeMessageHandler", {
       functionName: `${prefix}-message-handler`,
       runtime: lambda.Runtime.NODEJS_20_X,
-      handler: "mssage.handler",
+      handler: "message.handler",
       code: lambda.Code.fromAsset(backendPath, {
         bundling: {
           image: lambda.Runtime.NODEJS_20_X.bundlingImage,
