@@ -106,32 +106,6 @@ export class DimeStack extends cdk.Stack {
         allowHeaders: ["Content-Type", "Authorization"],
       },
     });
-
-    const messageResource = api.root.addResource("message");
-    messageResource.addMethod(
-      "POST",
-      new apigateway.LambdaIntegration(messageHandler, {
-        requestTemplates: { "application/json": '{ "statusCode": "200" }' },
-      })
-    );
-
-    const healthResource = api.root.addResource("health");
-    healthResource.addMethod(
-      "GET",
-      new apigateway.MockIntegration({
-        integrationResponses: [
-          {
-            statusCode: "200",
-            responseTemplates: {
-              "application/json": `{"status":"ok","service":"dime","stage":"${stage}"}`,
-            },
-          },
-        ],
-        passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
-        requestTemplates: { "application/json": '{"statusCode": 200}' },
-      }),
-      { methodResponses: [{ statusCode: "200" }] }
-    );
     
     const userPool = new cognito.UserPool(this, "DimeUserPool", {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -202,6 +176,33 @@ export class DimeStack extends cdk.Stack {
       handler: jwtHandler,
       validationRegex: "^(Bearer )[a-zA-Z0-9\-_]+?\.[a-zA-Z0-9\-_]+?\.([a-zA-Z0-9\-_]+)$"
       });
+
+      const messageResource = api.root.addResource("message");
+      messageResource.addMethod(
+        "POST",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        })
+      );
+  
+      const healthResource = api.root.addResource("health");
+      healthResource.addMethod(
+        "GET",
+        new apigateway.MockIntegration({
+          integrationResponses: [
+            {
+              statusCode: "200",
+              responseTemplates: {
+                "application/json": `{"status":"ok","service":"dime","stage":"${stage}"}`,
+              },
+            },
+          ],
+          passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
+          requestTemplates: { "application/json": '{"statusCode": 200}' },
+        }),
+        { methodResponses: [{ statusCode: "200" }],
+          authorizer: tokenAuthorizer },
+      );
 
     new cdk.CfnOutput(this, "ApiUrl", {
       value: api.url,
