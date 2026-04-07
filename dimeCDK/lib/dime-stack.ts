@@ -4,6 +4,7 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
+import * as cognito from "aws-cdk-lib/aws-cognito";
 import { Construct } from "constructs";
 import * as path from "path";
 
@@ -225,32 +226,103 @@ export class DimeStack extends cdk.Stack {
         allowHeaders: ["Content-Type", "Authorization"],
       },
     });
+    
+    const userPool = new cognito.UserPool(this, "DimeUserPool", {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
 
-    const messageResource = api.root.addResource("message");
-    messageResource.addMethod(
-      "POST",
-      new apigateway.LambdaIntegration(messageHandler, {
-        requestTemplates: { "application/json": '{ "statusCode": "200" }' },
-      })
-    );
+    const appIntegrationClient = userPool.addClient("DimeClient", {
+      userPoolClientName: "DimeWebClient",
+      idTokenValidity: cdk.Duration.days(1),
+      accessTokenValidity: cdk.Duration.days(1),
+      authFlows: {
+        adminUserPassword: true
+      },
+      oAuth: {
+        flows: {authorizationCodeGrant: true},
+        scopes: [cognito.OAuthScope.OPENID]
+      },
+      supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO]
+    });
 
-    const healthResource = api.root.addResource("health");
-    healthResource.addMethod(
-      "GET",
-      new apigateway.MockIntegration({
-        integrationResponses: [
-          {
-            statusCode: "200",
-            responseTemplates: {
-              "application/json": `{"status":"ok","service":"dime","stage":"${stage}"}`,
+    const jwtHandler = new lambda.Function(this, "DimeJWTHandler", {
+      functionName: `${prefix}-jwt-handler`,
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: "jwtHandler.handler",
+      code: lambda.Code.fromAsset(backendPath, {
+        bundling: {
+          image: lambda.Runtime.NODEJS_20_X.bundlingImage,
+          local: {
+            tryBundle(outputDir: string) {
+              const { execSync } = require("child_process");
+
+              try {
+                execSync(
+                  `npx --prefix "${cdkRoot}" esbuild "${path.join(
+                    backendPath,
+                    "handlers/jwtHandler.ts"
+                  )}" --bundle --platform=node --target=node20 --outfile="${path.join(
+                    outputDir,
+                    "jwt.js"
+                  )}"`,
+                  { stdio: "inherit" }
+                );
+                return true;
+              } catch {
+                return false;
+              }
             },
           },
-        ],
-        passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
-        requestTemplates: { "application/json": '{"statusCode": 200}' },
+          command: [
+            "bash",
+            "-c",
+            "npx esbuild handlers/jwtHandler.ts --bundle --platform=node --target=node20 --outfile=/asset-output/jwt.js",
+          ],
+        },
       }),
-      { methodResponses: [{ statusCode: "200" }] }
-    );
+      environment: {
+        "API_ID": api.restApiId,
+        "API_REGION": this.region,
+        "ACCOUNT_ID": this.account,
+        "COGNITO_USER_POOL_ID": userPool.userPoolId,
+        "COGNITO_APP_CLIENT_ID": appIntegrationClient.userPoolClientId    
+    },
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      logRetention: logs.RetentionDays.ONE_WEEK,
+    });
+
+    const tokenAuthorizer = new apigateway.TokenAuthorizer(this, 'jwttokenAuth', {
+      handler: jwtHandler,
+      validationRegex: "^(Bearer )[a-zA-Z0-9\-_]+?\.[a-zA-Z0-9\-_]+?\.([a-zA-Z0-9\-_]+)$"
+      });
+
+      const messageResource = api.root.addResource("message");
+      messageResource.addMethod(
+        "POST",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        })
+      );
+  
+      const healthResource = api.root.addResource("health");
+      healthResource.addMethod(
+        "GET",
+        new apigateway.MockIntegration({
+          integrationResponses: [
+            {
+              statusCode: "200",
+              responseTemplates: {
+                "application/json": `{"status":"ok","service":"dime","stage":"${stage}"}`,
+              },
+            },
+          ],
+          passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
+          requestTemplates: { "application/json": '{"statusCode": 200}' },
+        }),
+        { methodResponses: [{ statusCode: "200" }],
+          authorizer: tokenAuthorizer },
+      );
 
     new cdk.CfnOutput(this, "ApiUrl", {
       value: api.url,
