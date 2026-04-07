@@ -1,0 +1,61 @@
+name: Deploy Dev
+
+on:
+  push:
+    branches:
+      - develop
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+
+    defaults:
+      run:
+        working-directory: dimeCDK
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            dimeCDK/package-lock.json
+            dimeBackend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm install
+        working-directory: dimeBackend
+
+      - name: Install CDK dependencies
+        run: npm install
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Resolve AWS account
+        id: aws-account
+        run: echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
+
+      - name: Bootstrap environment
+        run: npx cdk bootstrap aws://${{ steps.aws-account.outputs.account_id }}/${{ secrets.AWS_REGION }}
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy dev stack
+        run: npm run deploy:dev
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ steps.aws-account.outputs.account_id }}
+          CDK_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
