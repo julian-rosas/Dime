@@ -42,11 +42,6 @@ export class DimeStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy,
     });
-    usersTable.addGlobalSecondaryIndex({
-      indexName: "phone-index",
-      partitionKey: { name: "phone", type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL,
-    });
 
     const authSessionsTable = new dynamodb.Table(this, "DimeAuthSessions", {
       tableName: createTableName(prefix, "auth-sessions"),
@@ -55,12 +50,6 @@ export class DimeStack extends cdk.Stack {
       timeToLiveAttribute: "ttl",
       removalPolicy,
     });
-    authSessionsTable.addGlobalSecondaryIndex({
-      indexName: "userId-createdAt-index",
-      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL,
-    });
 
     const conversationsTable = new dynamodb.Table(this, "DimeConversations", {
       tableName: createTableName(prefix, "conversations"),
@@ -68,12 +57,6 @@ export class DimeStack extends cdk.Stack {
       sortKey: { name: "conversationId", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy,
-    });
-    conversationsTable.addGlobalSecondaryIndex({
-      indexName: "userId-updatedAt-index",
-      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "updatedAt", type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL,
     });
 
     const conversationMessagesTable = new dynamodb.Table(
@@ -101,11 +84,6 @@ export class DimeStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy,
     });
-    userContactsTable.addGlobalSecondaryIndex({
-      indexName: "contactUserId-index",
-      partitionKey: { name: "contactUserId", type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL,
-    });
 
     const savingsGoalsTable = new dynamodb.Table(this, "DimeSavingsGoals", {
       tableName: createTableName(prefix, "savings-goals"),
@@ -114,12 +92,6 @@ export class DimeStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy,
     });
-    savingsGoalsTable.addGlobalSecondaryIndex({
-      indexName: "userId-status-index",
-      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "status", type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL,
-    });
 
     const transactionsTable = new dynamodb.Table(this, "DimeTransactions", {
       tableName: createTableName(prefix, "transactions"),
@@ -127,24 +99,6 @@ export class DimeStack extends cdk.Stack {
       sortKey: { name: "createdAtTxId", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy,
-    });
-    transactionsTable.addGlobalSecondaryIndex({
-      indexName: "userId-status-index",
-      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "status", type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL,
-    });
-    transactionsTable.addGlobalSecondaryIndex({
-      indexName: "contactUserId-createdAt-index",
-      partitionKey: { name: "contactUserId", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL,
-    });
-    transactionsTable.addGlobalSecondaryIndex({
-      indexName: "goalId-createdAt-index",
-      partitionKey: { name: "goalId", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL,
     });
 
     const anthropicSecret = new secretsmanager.Secret(this, "AnthropicApiKey", {
