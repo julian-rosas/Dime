@@ -9,6 +9,9 @@ import { handleDeleteConversation } from "./conversations/delete-conversation";
 import { handleGetConversation } from "./conversations/get-conversation";
 import { handleListConversations } from "./conversations/list-conversations";
 import { handleUpdateConversation } from "./conversations/update-conversation";
+import { handleCreateConversationMessage } from "./conversation-messages/create-conversation-message";
+import { handleGetConversationMessage } from "./conversation-messages/get-conversation-message";
+import { handleListConversationMessages } from "./conversation-messages/list-conversation-messages";
 import { handleCreateContact } from "./contacts/create-contact";
 import { handleDeleteContact } from "./contacts/delete-contact";
 import { handleGetContact } from "./contacts/get-contact";
@@ -29,6 +32,12 @@ const routes = new Map<string, RouteHandler>([
   ["GET /me/conversations/{conversationId}", handleGetConversation],
   ["PATCH /me/conversations/{conversationId}", handleUpdateConversation],
   ["DELETE /me/conversations/{conversationId}", handleDeleteConversation],
+  ["GET /me/conversations/{conversationId}/messages", handleListConversationMessages],
+  ["POST /me/conversations/{conversationId}/messages", handleCreateConversationMessage],
+  [
+    "GET /me/conversations/{conversationId}/messages/{messageId}",
+    handleGetConversationMessage,
+  ],
   ["GET /me/contacts", handleListContacts],
   ["POST /me/contacts", handleCreateContact],
   ["GET /me/contacts/{contactUserId}", handleGetContact],
