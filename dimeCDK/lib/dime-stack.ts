@@ -308,8 +308,48 @@ export class DimeStack extends cdk.Stack {
       );
 
       const meResource = api.root.addResource("me");
+      const conversationsResource = meResource.addResource("conversations");
       const contactsResource = meResource.addResource("contacts");
+      const conversationByIdResource =
+        conversationsResource.addResource("{conversationId}");
       const contactByIdResource = contactsResource.addResource("{contactUserId}");
+
+      conversationsResource.addMethod(
+        "GET",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+      conversationsResource.addMethod(
+        "POST",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+
+      conversationByIdResource.addMethod(
+        "GET",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+      conversationByIdResource.addMethod(
+        "PATCH",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+      conversationByIdResource.addMethod(
+        "DELETE",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
 
       contactsResource.addMethod(
         "GET",
@@ -382,6 +422,16 @@ export class DimeStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ContactsEndpoint", {
       value: `${api.url}me/contacts`,
       description: "GET/POST endpoint para gestionar contactos del usuario",
+    });
+
+    new cdk.CfnOutput(this, "ConversationsEndpoint", {
+      value: `${api.url}me/conversations`,
+      description: "GET/POST endpoint para gestionar conversaciones del usuario",
+    });
+
+    new cdk.CfnOutput(this, "ConversationByIdEndpoint", {
+      value: `${api.url}me/conversations/{conversationId}`,
+      description: "GET/PATCH/DELETE endpoint para una conversacion puntual",
     });
 
     new cdk.CfnOutput(this, "ContactByIdEndpoint", {
