@@ -1,6 +1,7 @@
 import axios from "axios";
+import { getApiKey } from "../nessiUtils";
 
-const API_KEY = "b0f85320c5b6ffb169bdbcaa572e4b68";
+const API_KEY = getApiKey();
 const BASE_URL = "http://api.reimaginebanking.com";
 
 let service: any = {};

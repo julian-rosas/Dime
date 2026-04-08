@@ -181,13 +181,15 @@ export class DimeStack extends cdk.Stack {
         COGNITO_APP_CLIENT_ID: appIntegrationClient.userPoolClientId,
         OPENAI_SECRET_ARN: openaiSecret.secretArn,
         NODE_ENV: "production",
-        NESSIE_API_KEY: secret.secretValueFromJson('nessieApiKey').toString(),
+        NESSIE_SECRET_ARN: 'arn:aws:secretsmanager:us-east-1:986420598546:secret:nessieApiKey-fNsrs3',
         STAGE: stage,
       },
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
       logRetention: logs.RetentionDays.ONE_WEEK,
     });
+
+    secret.grantRead(messageHandler);
 
     legacySessionsTable.grantReadWriteData(messageHandler);
     usersTable.grantReadWriteData(messageHandler);
