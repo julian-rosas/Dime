@@ -251,7 +251,7 @@ function ChatTab({ messages, setMessages, inputText, setInputText, isRecording, 
 function ContactsTab() {
   return (
     <ScrollView style={styles.tabContent}>
-      <Text style={styles.sectionTitle} style={{ padding: 20, fontSize: 22, fontWeight: '700', color: '#1a1a2e' }}>
+      <Text style={styles.sectionTitle} style={[styles.sectionTitle, { padding: 20, fontSize: 22, fontWeight: '700', color: '#1a1a2e' }]}>
         Contactos
       </Text>
       {CONTACTS.map((c) => (
