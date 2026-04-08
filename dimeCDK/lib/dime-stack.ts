@@ -230,7 +230,7 @@ export class DimeStack extends cdk.Stack {
                     "handlers/jwtHandler.ts"
                   )}" --bundle --platform=node --target=node20 --outfile="${path.join(
                     outputDir,
-                    "jwt.js"
+                    "jwtHandler.js"
                   )}"`,
                   { stdio: "inherit" }
                 );
@@ -243,7 +243,7 @@ export class DimeStack extends cdk.Stack {
           command: [
             "bash",
             "-c",
-            "npx esbuild handlers/jwtHandler.ts --bundle --platform=node --target=node20 --outfile=/asset-output/jwt.js",
+            "npx esbuild handlers/jwtHandler.ts --bundle --platform=node --target=node20 --outfile=/asset-output/jwtHandler.js",
           ],
         },
       }),
