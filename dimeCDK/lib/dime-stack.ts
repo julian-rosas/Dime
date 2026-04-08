@@ -207,7 +207,7 @@ export class DimeStack extends cdk.Stack {
       description: `API de Dime - finanzas conversacionales (${stage})`,
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ["POST", "OPTIONS"],
+        allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allowHeaders: ["Content-Type", "Authorization"],
       },
     });
@@ -307,6 +307,57 @@ export class DimeStack extends cdk.Stack {
           authorizer: tokenAuthorizer },
       );
 
+      const meResource = api.root.addResource("me");
+      const contactsResource = meResource.addResource("contacts");
+      const contactByIdResource = contactsResource.addResource("{contactUserId}");
+
+      contactsResource.addMethod(
+        "GET",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+      contactsResource.addMethod(
+        "POST",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+
+      contactByIdResource.addMethod(
+        "GET",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+      contactByIdResource.addMethod(
+        "PATCH",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+      contactByIdResource.addMethod(
+        "DELETE",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+
+      const usersResource = api.root.addResource("users");
+      const searchUsersResource = usersResource.addResource("search");
+      searchUsersResource.addMethod(
+        "GET",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+
     new cdk.CfnOutput(this, "ApiUrl", {
       value: api.url,
       description: "URL base del API",
@@ -326,6 +377,21 @@ export class DimeStack extends cdk.Stack {
     new cdk.CfnOutput(this, "AuthLoginEndpoint", {
       value: `${api.url}auth/login`,
       description: "POST endpoint para login con Cognito",
+    });
+
+    new cdk.CfnOutput(this, "ContactsEndpoint", {
+      value: `${api.url}me/contacts`,
+      description: "GET/POST endpoint para gestionar contactos del usuario",
+    });
+
+    new cdk.CfnOutput(this, "ContactByIdEndpoint", {
+      value: `${api.url}me/contacts/{contactUserId}`,
+      description: "GET/PATCH/DELETE endpoint para un contacto puntual",
+    });
+
+    new cdk.CfnOutput(this, "UserSearchEndpoint", {
+      value: `${api.url}users/search`,
+      description: "GET endpoint para buscar usuarios de Dime",
     });
 
     new cdk.CfnOutput(this, "CognitoUserPoolId", {
