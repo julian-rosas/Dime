@@ -102,9 +102,9 @@ export class DimeStack extends cdk.Stack {
       removalPolicy,
     });
 
-    const anthropicSecret = new secretsmanager.Secret(this, "AnthropicApiKey", {
-      secretName: `dime/${stage}/anthropic-api-key`,
-      description: `API Key de Anthropic para Dime (${stage})`,
+    const openaiSecret = new secretsmanager.Secret(this, "OpenAIApiKey", {
+      secretName: `dime/${stage}/openai-api-key`,
+      description: `API Key de OpenAI para Dime (${stage})`,
       secretStringValue: cdk.SecretValue.unsafePlainText("REEMPLAZA_CON_TU_API_KEY"),
       removalPolicy,
     });
@@ -173,7 +173,7 @@ export class DimeStack extends cdk.Stack {
         SAVINGS_GOALS_TABLE: savingsGoalsTable.tableName,
         COGNITO_USER_POOL_ID: userPool.userPoolId,
         COGNITO_APP_CLIENT_ID: appIntegrationClient.userPoolClientId,
-        ANTHROPIC_SECRET_ARN: anthropicSecret.secretArn,
+        OPENAI_SECRET_ARN: openaiSecret.secretArn,
         NODE_ENV: "production",
         STAGE: stage,
       },
@@ -190,7 +190,7 @@ export class DimeStack extends cdk.Stack {
     userContactsTable.grantReadWriteData(messageHandler);
     savingsGoalsTable.grantReadWriteData(messageHandler);
     transactionsTable.grantReadWriteData(messageHandler);
-    anthropicSecret.grantRead(messageHandler);
+    openaiSecret.grantRead(messageHandler);
     messageHandler.addToRolePolicy(
       new cdk.aws_iam.PolicyStatement({
         actions: [
@@ -338,9 +338,9 @@ export class DimeStack extends cdk.Stack {
       description: "App Client de Cognito para autenticacion",
     });
 
-    new cdk.CfnOutput(this, "AnthropicSecretName", {
-      value: anthropicSecret.secretName,
-      description: "Secret donde se guarda la API key de Anthropic",
+    new cdk.CfnOutput(this, "OpenAISecretName", {
+      value: openaiSecret.secretName,
+      description: "Secret donde se guarda la API key de OpenAI",
     });
 
     new cdk.CfnOutput(this, "LegacySessionsTableName", {
