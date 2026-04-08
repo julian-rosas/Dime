@@ -120,6 +120,141 @@ export interface ParsedIntent {
   confidence: "high" | "low";
 }
 
+type SecurityDecision =
+  | { blocked: false }
+  | { blocked: true; intent: ParsedIntent; reason: string };
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function cleanOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const cleaned = normalizeWhitespace(value);
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+function cleanOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function securityScreen(message: string): SecurityDecision {
+  const lower = message.toLowerCase();
+
+  const injectionPatterns = [
+    /ignore( the)? (above|previous) instructions?/,
+    /print your system prompt/,
+    /\bsystem prompt\b/,
+    /\boverride(_security)?\b/,
+    /\bapprove automatically\b/,
+    /\binstruction override\b/,
+    /\bhidden instruction\b/,
+    /\bpolicy override\b/,
+    /\blanguage switch attack\b/,
+    /\bprompt extraction\b/,
+    /\bcode injection\b/,
+    /\bfalse authorization\b/,
+  ];
+
+  const fraudPatterns = [
+    /transfiere en partes/,
+    /para no activar alertas/,
+    /sin validaci[oó]n/,
+    /sin confirmaci[oó]n/,
+    /cuenta comprometida/,
+    /n[uú]mero seguro/,
+    /modo de recuperaci[oó]n/,
+    /no se necesita pin/,
+    /haz la transferencia inmediatamente/,
+    /manda todo mi saldo/,
+  ];
+
+  if (injectionPatterns.some((pattern) => pattern.test(lower))) {
+    return {
+      blocked: true,
+      reason: "prompt_injection",
+      intent: { type: "unknown", confidence: "low" },
+    };
+  }
+
+  if (fraudPatterns.some((pattern) => pattern.test(lower))) {
+    return {
+      blocked: true,
+      reason: "fraud_like",
+      intent: { type: "unknown", confidence: "low" },
+    };
+  }
+
+  return { blocked: false };
+}
+
+function validateParsedIntent(intent: ParsedIntent, message: string, state: UserState): ParsedIntent {
+  const safeIntentTypes = new Set<IntentType>([
+    "transfer",
+    "check_balance",
+    "savings_create",
+    "savings_deposit",
+    "savings_view",
+    "confirm",
+    "cancel",
+    "help",
+    "unknown",
+  ]);
+
+  const type = safeIntentTypes.has(intent.type) ? intent.type : "unknown";
+  const confidence = intent.confidence === "high" ? "high" : "low";
+  const amount = cleanOptionalNumber(intent.amount);
+  const recipient = cleanOptionalString(intent.recipient);
+  const savingsGoalName = cleanOptionalString(intent.savingsGoalName);
+  const savingsTarget = cleanOptionalNumber(intent.savingsTarget);
+  const savingsGoalId = cleanOptionalString(intent.savingsGoalId);
+
+  if (type === "unknown" || type === "help" || type === "check_balance" || type === "confirm" || type === "cancel" || type === "savings_view") {
+    return { type, confidence };
+  }
+
+  if (type === "transfer") {
+    const lower = message.toLowerCase();
+    if (
+      /sin validaci[oó]n|sin confirmaci[oó]n|cuenta comprometida|para no activar alertas|ignore the above|system prompt/.test(
+        lower
+      )
+    ) {
+      return { type: "unknown", confidence: "low" };
+    }
+
+    return {
+      type,
+      amount,
+      recipient,
+      confidence: amount !== undefined || recipient !== undefined ? confidence : "low",
+    };
+  }
+
+  if (type === "savings_create") {
+    return {
+      type,
+      savingsGoalName,
+      savingsTarget,
+      confidence: savingsGoalName || savingsTarget !== undefined ? confidence : "low",
+    };
+  }
+
+  if (type === "savings_deposit") {
+    const validSavingsGoalId =
+      savingsGoalId && state.savings.some((goal) => goal.id === savingsGoalId) ? savingsGoalId : undefined;
+
+    return {
+      type,
+      amount,
+      savingsGoalId: validSavingsGoalId,
+      confidence: amount !== undefined ? confidence : "low",
+    };
+  }
+
+  return { type: "unknown", confidence: "low" };
+}
+
 // Construye el system prompt con el contexto del usuario y patrones del dataset sintético.
 function buildSystemPrompt(state: UserState): string {
   const contactList =
@@ -223,6 +358,12 @@ export async function parseIntent(
   message: string,
   state: UserState
 ): Promise<ParsedIntent> {
+  const securityDecision = securityScreen(message);
+  if (securityDecision.blocked) {
+    console.warn("Mensaje bloqueado por filtro de seguridad:", securityDecision.reason, message);
+    return securityDecision.intent;
+  }
+
   const client = await getClient();
 
   try {
@@ -243,10 +384,10 @@ export async function parseIntent(
 
     const text = extractJsonObject(response.output_text ?? "");
     const parsed = JSON.parse(text) as ParsedIntent;
-    return parsed;
+    return validateParsedIntent(parsed, message, state);
   } catch (err) {
     console.error("Error parseando intención con OpenAI:", err);
-    return fallbackParse(message);
+    return validateParsedIntent(fallbackParse(message), message, state);
   }
 }
 
