@@ -319,6 +319,10 @@ export class DimeStack extends cdk.Stack {
       const contactsResource = meResource.addResource("contacts");
       const conversationByIdResource =
         conversationsResource.addResource("{conversationId}");
+      const conversationMessagesResource =
+        conversationByIdResource.addResource("messages");
+      const conversationMessageByIdResource =
+        conversationMessagesResource.addResource("{messageId}");
       const contactByIdResource = contactsResource.addResource("{contactUserId}");
 
       conversationsResource.addMethod(
@@ -352,6 +356,28 @@ export class DimeStack extends cdk.Stack {
       );
       conversationByIdResource.addMethod(
         "DELETE",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+
+      conversationMessagesResource.addMethod(
+        "GET",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+      conversationMessagesResource.addMethod(
+        "POST",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+      conversationMessageByIdResource.addMethod(
+        "GET",
         new apigateway.LambdaIntegration(messageHandler, {
           requestTemplates: { "application/json": '{ "statusCode": "200" }' },
         }),

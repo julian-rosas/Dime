@@ -93,7 +93,7 @@ function mapConversation(record: ConversationRecord) {
   };
 }
 
-async function getConversationRecord(
+export async function getConversationRecord(
   userId: string,
   conversationId: string
 ): Promise<ConversationRecord | undefined> {
