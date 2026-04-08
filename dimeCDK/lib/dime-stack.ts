@@ -127,6 +127,12 @@ export class DimeStack extends cdk.Stack {
       supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO]
     });
 
+    const secret = secretsmanager.Secret.fromSecretCompleteArn(
+      this,
+      'NessieSecret',
+      'arn:aws:secretsmanager:us-east-1:986420598546:secret:nessieApiKey-fNsrs3'
+    );
+
     const messageHandler = new lambda.Function(this, "DimeMessageHandler", {
       functionName: `${prefix}-message-handler`,
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -175,6 +181,7 @@ export class DimeStack extends cdk.Stack {
         COGNITO_APP_CLIENT_ID: appIntegrationClient.userPoolClientId,
         OPENAI_SECRET_ARN: openaiSecret.secretArn,
         NODE_ENV: "production",
+        NESSIE_API_KEY: secret.secretValueFromJson('nessieApiKey').toString(),
         STAGE: stage,
       },
       timeout: cdk.Duration.seconds(30),
