@@ -4,7 +4,7 @@ import { getApiKey } from "../nessiUtils";
 const API_KEY = getApiKey();
 const BASE_URL = "http://api.reimaginebanking.com";
 
-export async function getAllAccountTransfers(id: number) {
+export async function getAllAccountTransfers(id: string) {
   try {
     const response = await axios.get(
       `${BASE_URL}/accounts/${id}/transfers`,
@@ -31,8 +31,8 @@ export async function getTransferById(transferId: string) {
 }
 
 export async function createAccountTransfer(
-  fromId: number,
-  toId: number,
+  fromId: string,
+  toId: string,
   amount: number,
   description: string = "Transfer"
 ) {

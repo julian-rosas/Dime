@@ -1,5 +1,6 @@
 import axios from "axios";
 import { getApiKey } from "../nessiUtils";
+import { Account } from "aws-sdk";
 
 const API_KEY = getApiKey();
 const BASE_URL = "http://api.reimaginebanking.com";
@@ -24,7 +25,7 @@ async function getAllAccounts() {
   }
 }
 
-async function getAccountById(id: number) {
+async function getAccountById(id: string) {
   try {
     const res = await axios.get(`${BASE_URL}/accounts/${id}`, {
       params: { key: API_KEY },
@@ -35,7 +36,7 @@ async function getAccountById(id: number) {
   }
 }
 
-async function updateAccount(id: number, newAccount: any) {
+async function updateAccount(id: string, newAccount: Account) {
   try {
     const res = await axios.put(
       `${BASE_URL}/accounts/${id}`,
@@ -48,7 +49,7 @@ async function updateAccount(id: number, newAccount: any) {
   }
 }
 
-async function deleteAccount(id: number) {
+async function deleteAccount(id: string, account: Account) {
   try {
     const res = await axios.delete(`${BASE_URL}/accounts/${id}`, {
       params: { key: API_KEY },
@@ -59,3 +60,6 @@ async function deleteAccount(id: number) {
   }
 }
 
+async function createAccount(id: string) {
+
+}
