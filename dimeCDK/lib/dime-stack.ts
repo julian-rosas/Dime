@@ -102,9 +102,9 @@ export class DimeStack extends cdk.Stack {
       removalPolicy,
     });
 
-    const anthropicSecret = new secretsmanager.Secret(this, "AnthropicApiKey", {
-      secretName: `dime/${stage}/anthropic-api-key`,
-      description: `API Key de Anthropic para Dime (${stage})`,
+    const openaiSecret = new secretsmanager.Secret(this, "OpenAIApiKey", {
+      secretName: `dime/${stage}/openai-api-key`,
+      description: `API Key de OpenAI para Dime (${stage})`,
       secretStringValue: cdk.SecretValue.unsafePlainText("REEMPLAZA_CON_TU_API_KEY"),
       removalPolicy,
     });
@@ -173,7 +173,7 @@ export class DimeStack extends cdk.Stack {
         SAVINGS_GOALS_TABLE: savingsGoalsTable.tableName,
         COGNITO_USER_POOL_ID: userPool.userPoolId,
         COGNITO_APP_CLIENT_ID: appIntegrationClient.userPoolClientId,
-        ANTHROPIC_SECRET_ARN: anthropicSecret.secretArn,
+        OPENAI_SECRET_ARN: openaiSecret.secretArn,
         NODE_ENV: "production",
         STAGE: stage,
       },
@@ -190,7 +190,7 @@ export class DimeStack extends cdk.Stack {
     userContactsTable.grantReadWriteData(messageHandler);
     savingsGoalsTable.grantReadWriteData(messageHandler);
     transactionsTable.grantReadWriteData(messageHandler);
-    anthropicSecret.grantRead(messageHandler);
+    openaiSecret.grantRead(messageHandler);
     messageHandler.addToRolePolicy(
       new cdk.aws_iam.PolicyStatement({
         actions: [
@@ -207,7 +207,7 @@ export class DimeStack extends cdk.Stack {
       description: `API de Dime - finanzas conversacionales (${stage})`,
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ["POST", "OPTIONS"],
+        allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allowHeaders: ["Content-Type", "Authorization"],
       },
     });
@@ -307,6 +307,57 @@ export class DimeStack extends cdk.Stack {
           authorizer: tokenAuthorizer },
       );
 
+      const meResource = api.root.addResource("me");
+      const contactsResource = meResource.addResource("contacts");
+      const contactByIdResource = contactsResource.addResource("{contactUserId}");
+
+      contactsResource.addMethod(
+        "GET",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+      contactsResource.addMethod(
+        "POST",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+
+      contactByIdResource.addMethod(
+        "GET",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+      contactByIdResource.addMethod(
+        "PATCH",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+      contactByIdResource.addMethod(
+        "DELETE",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+
+      const usersResource = api.root.addResource("users");
+      const searchUsersResource = usersResource.addResource("search");
+      searchUsersResource.addMethod(
+        "GET",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+
     new cdk.CfnOutput(this, "ApiUrl", {
       value: api.url,
       description: "URL base del API",
@@ -328,6 +379,21 @@ export class DimeStack extends cdk.Stack {
       description: "POST endpoint para login con Cognito",
     });
 
+    new cdk.CfnOutput(this, "ContactsEndpoint", {
+      value: `${api.url}me/contacts`,
+      description: "GET/POST endpoint para gestionar contactos del usuario",
+    });
+
+    new cdk.CfnOutput(this, "ContactByIdEndpoint", {
+      value: `${api.url}me/contacts/{contactUserId}`,
+      description: "GET/PATCH/DELETE endpoint para un contacto puntual",
+    });
+
+    new cdk.CfnOutput(this, "UserSearchEndpoint", {
+      value: `${api.url}users/search`,
+      description: "GET endpoint para buscar usuarios de Dime",
+    });
+
     new cdk.CfnOutput(this, "CognitoUserPoolId", {
       value: userPool.userPoolId,
       description: "User Pool de Cognito para autenticacion",
@@ -338,9 +404,9 @@ export class DimeStack extends cdk.Stack {
       description: "App Client de Cognito para autenticacion",
     });
 
-    new cdk.CfnOutput(this, "AnthropicSecretName", {
-      value: anthropicSecret.secretName,
-      description: "Secret donde se guarda la API key de Anthropic",
+    new cdk.CfnOutput(this, "OpenAISecretName", {
+      value: openaiSecret.secretName,
+      description: "Secret donde se guarda la API key de OpenAI",
     });
 
     new cdk.CfnOutput(this, "LegacySessionsTableName", {
