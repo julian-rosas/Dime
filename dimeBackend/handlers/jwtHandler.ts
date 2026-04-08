@@ -1,22 +1,12 @@
-import jwt, { JwtHeader, SigningKeyCallback, Algorithm } from "jsonwebtoken";
+import jwt, {
+  Algorithm,
+  JwtHeader,
+  JwtPayload,
+  SigningKeyCallback,
+} from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 
 const LOGGER = console;
-
-const AUTHORIZED_RESPONSE = {
-  policyDocument: {
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Action: "execute-api:Invoke",
-        Resource: [
-          `arn:aws:execute-api:${process.env.API_REGION}:${process.env.ACCOUNT_ID}:${process.env.API_ID}*`,
-        ],
-        Effect: "Allow",
-      },
-    ],
-  },
-};
 
 const UNAUTHORIZED_RESPONSE = {
   policyDocument: {
@@ -35,6 +25,33 @@ const BASE_ISSUER_URL = `https://cognito-idp.${process.env.API_REGION}.amazonaws
 const JWKS_URL = `${BASE_ISSUER_URL}/.well-known/jwks.json`;
 
 const VALID_TOKEN_USE = ["id"];
+
+function buildAuthorizedResponse(decodedToken: JwtPayload) {
+  return {
+    principalId:
+      decodedToken.sub ??
+      decodedToken["cognito:username"]?.toString() ??
+      "authenticated-user",
+    context: {
+      userId: decodedToken.sub?.toString() ?? "",
+      cognitoUsername:
+        decodedToken["cognito:username"]?.toString() ?? "",
+      email: decodedToken.email?.toString() ?? "",
+    },
+    policyDocument: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Action: "execute-api:Invoke",
+          Resource: [
+            `arn:aws:execute-api:${process.env.API_REGION}:${process.env.ACCOUNT_ID}:${process.env.API_ID}*`,
+          ],
+          Effect: "Allow",
+        },
+      ],
+    },
+  };
+}
 
 function validToken(token: any, audience: string): boolean {
   const expiryTime = token.exp;
@@ -164,7 +181,7 @@ export const handler = async (event: any, context: any) => {
       return UNAUTHORIZED_RESPONSE;
     }
 
-    return AUTHORIZED_RESPONSE;
+    return buildAuthorizedResponse(decodedToken);
   } catch (err: any) {
     LOGGER.error(`Token verification failed: ${err.message}`);
     return UNAUTHORIZED_RESPONSE;
