@@ -1,11 +1,50 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform,
+  Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
+import { signup } from '../services/api';
 
-export default function RegisterScreen({ navigation }) {
+export default function RegisterScreen({ navigation, onAuthenticated }) {
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSignup = async () => {
+    if (!password.trim() || password.trim().length < 8) {
+      setError('Escribe una contraseña de al menos 8 caracteres.');
+      return;
+    }
+
+    if (!email.trim() && !phone.trim()) {
+      setError('Necesitas capturar un correo o un teléfono.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const result = await signup({
+        displayName: displayName.trim() || 'Usuario Dime',
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        password,
+      });
+
+      onAuthenticated(result);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
+    } catch (err) {
+      setError(err.message || 'No se pudo completar el registro.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -18,10 +57,30 @@ export default function RegisterScreen({ navigation }) {
 
       <Text style={styles.title}>Registrar</Text>
 
+      <Text style={styles.label}>Nombre</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Tu nombre"
+        placeholderTextColor="#aaa"
+        value={displayName}
+        onChangeText={setDisplayName}
+      />
+
+      <Text style={styles.label}>Correo</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="julian@example.com"
+        placeholderTextColor="#aaa"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        value={email}
+        onChangeText={setEmail}
+      />
+
       <Text style={styles.label}>Número de Teléfono</Text>
       <TextInput
         style={styles.input}
-        placeholder="+1 (555) 000-0000"
+        placeholder="+525512345678"
         placeholderTextColor="#aaa"
         keyboardType="phone-pad"
         value={phone}
@@ -38,11 +97,18 @@ export default function RegisterScreen({ navigation }) {
         onChangeText={setPassword}
       />
 
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
       <TouchableOpacity
-        style={styles.button}
-        onPress={() => navigation.navigate('Home')}
+        style={[styles.button, isSubmitting && styles.buttonDisabled]}
+        onPress={handleSignup}
+        disabled={isSubmitting}
       >
-        <Text style={styles.buttonText}>Registrar</Text>
+        {isSubmitting ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Registrar</Text>
+        )}
       </TouchableOpacity>
     </KeyboardAvoidingView>
   );
@@ -96,5 +162,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  errorText: {
+    color: '#d62839',
+    marginTop: 16,
+    fontSize: 14,
   },
 });
