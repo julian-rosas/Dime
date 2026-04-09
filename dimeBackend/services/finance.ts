@@ -165,7 +165,7 @@ export async function depositToSavings(
   var goal: any;
 
   try {
-    goal = getAccountById(goalId);
+    goal = await getAccountById(goalId);
   } catch (err: any){
     return { success: false, message: "No encontré esa cajita de ahorro." };
   }

@@ -47,17 +47,17 @@ async function handlePendingConfirmation(
     state.pendingOperation = null;
 
     if (op.type === "transfer" && op.amount && op.recipient) {
-      const result = executeTransfer(state, op.amount, op.recipient);
+      const result = await executeTransfer(state, op.amount, op.recipient);
       return result.message;
     }
 
     if (op.type === "savings_create" && op.savingsGoalName && op.amount) {
-      const result = createSavingsGoal(state, op.savingsGoalName, op.amount);
+      const result = await createSavingsGoal(state, op.savingsGoalName, op.amount);
       return result.message;
     }
 
     if (op.type === "savings_deposit" && op.savingsGoalId && op.amount) {
-      const result = depositToSavings(state, op.savingsGoalId, op.amount);
+      const result = await depositToSavings(state, op.savingsGoalId, op.amount);
       return result.message;
     }
 
