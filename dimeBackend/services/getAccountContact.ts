@@ -16,6 +16,7 @@ export async function getContactAccountId(
   nickname: string
 ): Promise<string> {
   try {
+    const normalizedNickname = nickname.trim().toLowerCase();
     const contactsResult = await ddb.send(
       new QueryCommand({
         TableName: CONTACTS_TABLE,
@@ -30,10 +31,14 @@ export async function getContactAccountId(
       return "";
     }
 
-    const contact = contactsResult.Items.find(
-      (c: any) =>
-        c.nickname?.toLowerCase() === nickname.toLowerCase()
-    );
+    const contact = contactsResult.Items.find((c: any) => {
+      const nicknameMatch = c.nickname?.toLowerCase() === normalizedNickname;
+      const aliasMatch = Array.isArray(c.aliasForMe)
+        ? c.aliasForMe.some((alias: string) => alias?.toLowerCase() === normalizedNickname)
+        : false;
+
+      return nicknameMatch || aliasMatch;
+    });
 
     if (!contact) {
       return "";
@@ -52,7 +57,7 @@ export async function getContactAccountId(
       return "";
     }
 
-    return userResult.Item.nessieId;
+    return userResult.Item.primaryAccountId ?? "";
 
   } catch (error) {
     console.error("Error getting contact accountId:", error);
