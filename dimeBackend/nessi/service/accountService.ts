@@ -2,7 +2,7 @@ import axios from "axios";
 import { getApiKey } from "../nessiUtils";
 import { Account } from "aws-sdk";
 
-const BASE_URL = "http://api.reimaginebanking.com";
+const BASE_URL = "http://api.nessieisreal.com";
 
 export async function getAllAccounts() {
   try {
