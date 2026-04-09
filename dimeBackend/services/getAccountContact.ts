@@ -8,7 +8,7 @@ import {
 const client = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(client);
 
-const CONTACTS_TABLE = process.env.CONTACTS_TABLE!;
+const CONTACTS_TABLE = process.env.USER_CONTACTS_TABLE!;
 const USERS_TABLE = process.env.USERS_TABLE!;
 
 export async function getContactAccountId(
