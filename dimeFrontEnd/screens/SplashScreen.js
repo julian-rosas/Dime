@@ -12,7 +12,7 @@ import { useFonts, BreeSerif_400Regular } from '@expo-google-fonts/bree-serif';
 
 const { width, height } = Dimensions.get('window');
 
-export default function SplashScreen({ navigation, session }) {
+export default function SplashScreen({ navigation }) {
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(1.3)).current;
   const dimeOpacity = useRef(new Animated.Value(0)).current;
@@ -35,17 +35,6 @@ export default function SplashScreen({ navigation, session }) {
       Animated.timing(buttonsOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
     ]).start();
   }, []);
-
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Home' }],
-    });
-  }, [navigation, session]);
 
   const bgColor = bgAnim.interpolate({
     inputRange: [0, 1],

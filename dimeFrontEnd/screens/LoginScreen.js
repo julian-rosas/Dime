@@ -26,10 +26,6 @@ export default function LoginScreen({ navigation, onAuthenticated }) {
       });
 
       onAuthenticated(result);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Home' }],
-      });
     } catch (err) {
       setError(err.message || 'No se pudo iniciar sesión.');
     } finally {

@@ -35,10 +35,6 @@ export default function RegisterScreen({ navigation, onAuthenticated }) {
       });
 
       onAuthenticated(result);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Home' }],
-      });
     } catch (err) {
       setError(err.message || 'No se pudo completar el registro.');
     } finally {
