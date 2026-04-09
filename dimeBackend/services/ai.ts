@@ -470,6 +470,32 @@ function fallbackParse(message: string): ParsedIntent {
     };
   }
 
+  const savingsCreateGoalAndTargetMatch = lower.match(
+    /(.+?)\s+(?:meta|objetivo)\s+\$?([\d,]+(?:\.\d{1,2})?)/
+  );
+  if (savingsCreateGoalAndTargetMatch) {
+    return {
+      type: "savings_create",
+      savingsGoalName: savingsCreateGoalAndTargetMatch[1]
+        .replace(/^(para|de|el|la|los|las|un|una)\s+/i, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+      savingsTarget: parseFloat(savingsCreateGoalAndTargetMatch[2].replace(/,/g, "")),
+      confidence: "high",
+    };
+  }
+
+  const savingsTargetOnlyMatch = lower.match(
+    /(?:meta|objetivo)\s+\$?([\d,]+(?:\.\d{1,2})?)/
+  );
+  if (savingsTargetOnlyMatch) {
+    return {
+      type: "savings_create",
+      savingsTarget: parseFloat(savingsTargetOnlyMatch[1].replace(/,/g, "")),
+      confidence: "high",
+    };
+  }
+
   if (/\b(ahorrar|apartar(?:\s+dinero)?|guardar\s+para|juntar\s+para|empezar\s+a\s+ahorrar)\b/.test(lower)) {
     return { type: "savings_create", confidence: "low" };
   }

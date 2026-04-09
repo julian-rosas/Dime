@@ -24,7 +24,14 @@ export async function processUserMessage(
 
   let reply: string;
   if (state.pendingOperation) {
-    reply = await handlePendingConfirmation(message, state);
+    if (
+      state.pendingOperation.type === "savings_create" &&
+      (!state.pendingOperation.amount || !state.pendingOperation.savingsGoalName)
+    ) {
+      reply = await handlePendingSavingsCreate(message, state);
+    } else {
+      reply = await handlePendingConfirmation(message, state);
+    }
   } else {
     const intent = await parseIntent(message, state);
     console.log(`[${sessionId}] Intencion detectada:`, intent);
@@ -72,6 +79,50 @@ async function handlePendingConfirmation(
   return `${op.description}\n\nConfirmas? Escribe *si* para proceder o *no* para cancelar.`;
 }
 
+async function handlePendingSavingsCreate(
+  message: string,
+  state: UserState
+): Promise<string> {
+  const intent = await parseIntent(message, state);
+  const op = state.pendingOperation!;
+
+  if (intent.type === "cancel") {
+    state.pendingOperation = null;
+    return "Operacion cancelada. En que mas te puedo ayudar?";
+  }
+
+  const nextGoalName = intent.savingsGoalName ?? op.savingsGoalName;
+  const nextTarget = intent.savingsTarget ?? op.amount;
+
+  state.pendingOperation = {
+    ...op,
+    savingsGoalName: nextGoalName,
+    amount: nextTarget,
+    description: op.description,
+  };
+
+  if (!nextGoalName && !nextTarget) {
+    return "Para crear tu cajita necesito el nombre y la meta. Ejemplo: *vacaciones meta 3000*";
+  }
+
+  if (!nextGoalName) {
+    return `Ya entendi la meta de *$${nextTarget?.toFixed(2)} MXN*. Ahora dime como quieres llamar tu cajita.`;
+  }
+
+  if (!nextTarget) {
+    return `Ya entendi que quieres ahorrar para *${nextGoalName}*. Ahora dime cual es tu meta. Ejemplo: *meta 3000*`;
+  }
+
+  state.pendingOperation = {
+    type: "savings_create",
+    savingsGoalName: nextGoalName,
+    amount: nextTarget,
+    description: `Vas a crear la cajita *"${nextGoalName}"* con meta de *$${nextTarget.toFixed(2)} MXN*.\n\nConfirmas? Escribe *si* o *no*.`,
+  };
+
+  return state.pendingOperation.description;
+}
+
 async function handleIntent(
   intent: Awaited<ReturnType<typeof parseIntent>>,
   originalMessage: string,
@@ -109,10 +160,20 @@ async function handleIntent(
       }
 
       if (intent.savingsGoalName && !intent.savingsTarget) {
+        state.pendingOperation = {
+          type: "savings_create",
+          savingsGoalName: intent.savingsGoalName,
+          description: `Crear cajita para ${intent.savingsGoalName}`,
+        };
         return `Ya entendi que quieres ahorrar para *${intent.savingsGoalName}*. Ahora dime cual es tu meta. Ejemplo: *meta 3000*`;
       }
 
       if (!intent.savingsGoalName && intent.savingsTarget) {
+        state.pendingOperation = {
+          type: "savings_create",
+          amount: intent.savingsTarget,
+          description: `Crear cajita con meta ${intent.savingsTarget.toFixed(2)}`,
+        };
         return `Ya entendi la meta de *$${intent.savingsTarget.toFixed(2)} MXN*. Ahora dime como quieres llamar tu cajita.`;
       }
 
