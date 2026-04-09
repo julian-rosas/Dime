@@ -387,6 +387,7 @@ export async function signup(input: SignupInput) {
     const authResult = await authenticateWithCognito(username, password);
     return finalizeAuthResponseSignup(authResult, firstName, lastName, displayName);
   } catch (error) {
+    console.error("Error en signup:", error);
     mapCognitoError(error);
   }
 }
@@ -403,6 +404,7 @@ export async function login(input: LoginInput) {
     const authResult = await authenticateWithCognito(identifier, password);
     return finalizeAuthResponseLogin(authResult);
   } catch (error) {
+    console.error("Error en login:", error);
     mapCognitoError(error);
   }
 }

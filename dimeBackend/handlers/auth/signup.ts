@@ -12,6 +12,8 @@ export async function handleSignup(
       phone?: string;
       password?: string;
       displayName?: string;
+      firstName?: string;
+      lastName?: string;
     }>(event);
 
     const result = await signup({
@@ -19,6 +21,8 @@ export async function handleSignup(
       phone: body.phone,
       password: body.password ?? "",
       displayName: body.displayName,
+      firstName: body.firstName ?? "",
+      lastName: body.lastName ?? "",
     });
 
     return respond(201, result);
