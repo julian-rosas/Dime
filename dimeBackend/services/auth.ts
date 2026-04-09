@@ -191,7 +191,7 @@ async function buildUserRecordFromClaimsSignup(
     balance: 0
   }
 
-  await createAccount(nessieCustomerId, initialAccount);
+  createAccount(nessieCustomerId, initialAccount);
   
   return {
     userId,
