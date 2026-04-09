@@ -9,6 +9,7 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { Contact } from "./finance";
+import { ensureStoredUserFinancialProfile } from "./users";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
@@ -17,6 +18,8 @@ const USER_CONTACTS_TABLE = process.env.USER_CONTACTS_TABLE ?? "";
 
 interface UserRecord {
   userId: string;
+  nessieId?: string;
+  nessieAccountId?: string;
   email?: string;
   phone?: string;
   phoneVerified?: boolean;
@@ -268,28 +271,52 @@ export async function createContact(userId: string, input: CreateContactInput) {
 }
 
 export async function listContactsForChat(userId: string): Promise<Contact[]> {
-  const contacts = await listContacts(userId);
+  if (!areTablesConfigured()) {
+    throw new Error("La tabla de contactos no esta configurada.");
+  }
 
-  return contacts.map((contact) => {
-    const displayName = contact.nickname ?? contact.contactUser.displayName ?? "Contacto";
-    const alias = Array.from(
-      new Set(
-        [
-          displayName,
-          contact.contactUser.displayName,
-          ...(contact.aliasForMe ?? []),
-        ]
-          .filter(Boolean)
-          .map((value) => String(value).trim().toLowerCase())
-      )
-    );
+  const result = await ddb.send(
+    new QueryCommand({
+      TableName: USER_CONTACTS_TABLE,
+      KeyConditionExpression: "userId = :userId",
+      ExpressionAttributeValues: {
+        ":userId": userId,
+      },
+    })
+  );
 
-    return {
-      name: displayName,
-      alias,
-      phone: contact.contactUser.phone ?? undefined,
-    };
-  });
+  const contacts = (result.Items ?? []) as UserContactRecord[];
+  const usersById = await getUsersByIds(contacts.map((contact) => contact.contactUserId));
+
+  return Promise.all(
+    contacts.map(async (contact) => {
+      const rawUser = usersById.get(contact.contactUserId);
+      if (!rawUser) {
+        return null;
+      }
+
+      const enrichedUser = rawUser.nessieAccountId
+        ? rawUser
+        : await ensureStoredUserFinancialProfile(rawUser as any);
+      const displayName = contact.nickname ?? enrichedUser.displayName ?? "Contacto";
+      const alias = Array.from(
+        new Set(
+          [displayName, enrichedUser.displayName, ...(contact.aliasForMe ?? [])]
+            .filter(Boolean)
+            .map((value) => String(value).trim().toLowerCase())
+        )
+      );
+
+      return {
+        name: displayName,
+        alias,
+        phone: enrichedUser.phone ?? undefined,
+        accountId: enrichedUser.nessieAccountId,
+      };
+    })
+  ).then((mappedContacts) =>
+    mappedContacts.filter((contact): contact is Contact => Boolean(contact))
+  );
 }
 
 export async function getContact(userId: string, contactUserId: string) {

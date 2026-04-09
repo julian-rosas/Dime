@@ -1,15 +1,11 @@
-// services/finance.ts
-// Motor financiero mock — guarda el estado en DynamoDB por sesión.
-// En producción, esto se conectaría a una fintech/banco real.
-
 import { createAccount, getAccountById } from "../nessi/service/accountService";
 import { createAccountTransfer } from "../nessi/service/transferService";
-import { mapAccountToUserState } from "./nessieFinanceMapper";
 
 export interface Contact {
   name: string;
-  alias: string[]; // nombres que el usuario puede usar para referirse a este contacto
+  alias: string[];
   phone?: string;
+  accountId?: string;
 }
 
 export interface SavingsGoal {
@@ -22,7 +18,7 @@ export interface SavingsGoal {
 
 export interface UserState {
   userId: string;
-  accountId: string; 
+  accountId: string;
   balance: number;
   contacts: Contact[];
   savings: SavingsGoal[];
@@ -33,9 +29,10 @@ export interface PendingOperation {
   type: "transfer" | "savings_deposit" | "savings_create";
   amount?: number;
   recipient?: string;
+  recipientAccountId?: string;
   savingsGoalId?: string;
   savingsGoalName?: string;
-  description: string; // descripción humana para mostrar en confirmación
+  description: string;
 }
 
 export interface FinancialResult {
@@ -45,32 +42,42 @@ export interface FinancialResult {
   updatedGoal?: SavingsGoal;
 }
 
-// Estado inicial para un usuario nuevo (mock)
-export function createInitialState(accountId: string): UserState {
-  return mapAccountToUserState(accountId);
+export function createInitialState(seedId: string): UserState {
+  return {
+    userId: seedId,
+    accountId: "",
+    balance: 1500,
+    contacts: [
+      { name: "Juan Garcia", alias: ["juan", "juancho"] },
+      { name: "Maria Lopez", alias: ["maria", "mary", "mama"] },
+      { name: "Carlos Perez", alias: ["carlos", "carlitos"] },
+    ],
+    savings: [],
+    pendingOperation: null,
+  };
 }
 
-// Resuelve un nombre a un contacto conocido
 export function resolveContact(name: string, contacts: Contact[]): Contact | null {
   const normalized = name.toLowerCase().trim();
   return (
     contacts.find(
-      (c) =>
-        c.name.toLowerCase().includes(normalized) ||
-        c.alias.some((a) => a === normalized)
+      (contact) =>
+        contact.name.toLowerCase().includes(normalized) ||
+        contact.alias.some((alias) => alias === normalized)
     ) ?? null
   );
 }
 
-// Ejecuta una transferencia
 export async function executeTransfer(
   state: UserState,
   amount: number,
-  recipientName: string
+  recipientName: string,
+  recipientAccountId?: string
 ): Promise<FinancialResult> {
   if (amount <= 0) {
     return { success: false, message: "El monto debe ser mayor a cero." };
   }
+
   if (amount > state.balance) {
     return {
       success: false,
@@ -78,27 +85,33 @@ export async function executeTransfer(
     };
   }
 
-  try {
-    // 2. Call API
-    await createAccountTransfer(
-      state.userId,   // ⚠️ make sure this is accountId, not customerId
-      recipientName,
-      amount
-    );
+  if (!state.accountId) {
+    return {
+      success: false,
+      message: "No pude identificar tu cuenta principal para transferir.",
+    };
+  }
 
-    // 3. Update local state ONLY if API succeeds
+  if (!recipientAccountId) {
+    return {
+      success: false,
+      message: `No pude identificar la cuenta de ${recipientName}. Vuelve a registrar ese contacto.`,
+    };
+  }
+
+  try {
+    await createAccountTransfer(state.accountId, recipientAccountId, amount);
     state.balance -= amount;
 
     return {
       success: true,
-      message: `✅ Transferiste $${amount.toFixed(2)} MXN a ${recipientName}. Tu nuevo saldo es $${state.balance.toFixed(2)} MXN.`,
+      message: `Transferiste $${amount.toFixed(2)} MXN a ${recipientName}. Tu nuevo saldo es $${state.balance.toFixed(2)} MXN.`,
       newBalance: state.balance,
     };
-
   } catch (error: any) {
     return {
       success: false,
-      message: `❌ Ocurrio un error al transferir`,
+      message: `Ocurrio un error al transferir: ${error?.message || error}`,
     };
   }
 }
@@ -108,7 +121,6 @@ export async function createSavingsGoal(
   name: string,
   target: number
 ): Promise<FinancialResult> {
-
   if (target <= 0) {
     return {
       success: false,
@@ -117,57 +129,47 @@ export async function createSavingsGoal(
   }
 
   try {
-    // 1. Create account in API
-    const newAccountPayload = {
-      type: "Credit Card", // ⚠️ you may want "Savings"
+    const accountResponse = await createAccount(state.userId, {
+      type: "Savings",
       nickname: name,
       rewards: 0,
-      balance: 0
-    };
-
-    const accountResponse = await createAccount(
-      state.userId, // ⚠️ must be customer_id
-      newAccountPayload
-    );
+      balance: 0,
+    });
 
     const goal: SavingsGoal = {
-      id:accountResponse.objectCreated?._id ,
+      id: accountResponse.objectCreated?._id,
       name,
       target,
       current: 0,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
 
     state.savings.push(goal);
 
     return {
       success: true,
-      message: `🎯 Creé tu cajita "${name}" con meta de $${target.toFixed(2)} MXN.`,
+      message: `Cree tu cajita "${name}" con meta de $${target.toFixed(2)} MXN.`,
       updatedGoal: goal,
     };
-
   } catch (error: any) {
     return {
       success: false,
-      message: `❌ Error al crear la cajita: ${error?.message || error}`,
+      message: `Error al crear la cajita: ${error?.message || error}`,
     };
   }
 }
 
-
-// Deposita a una cajita de ahorro
 export async function depositToSavings(
   state: UserState,
   goalId: string,
   amount: number
 ): Promise<FinancialResult> {
-  
-  var goal: any;
+  let goal: any;
 
   try {
     goal = await getAccountById(goalId);
-  } catch (err: any){
-    return { success: false, message: "No encontré esa cajita de ahorro." };
+  } catch {
+    return { success: false, message: "No encontre esa cajita de ahorro." };
   }
 
   if (amount <= 0) {
@@ -184,54 +186,60 @@ export async function depositToSavings(
     };
   }
 
+  if (!state.accountId) {
+    return {
+      success: false,
+      message: "No pude identificar tu cuenta principal para ahorrar.",
+    };
+  }
+
   try {
     await createAccountTransfer(
-      state.accountId,    
-      goal.accountId,     
+      state.accountId,
+      goal._id ?? goal.accountId,
       amount,
-      `Ahorro: ${goal.name}`
+      `Ahorro: ${goal.nickname ?? goal.name ?? "cajita"}`
     );
 
     state.balance -= amount;
-    goal.current += amount;
 
-    const percent = Math.min(
-      100,
-      Math.round((goal.current / goal.target) * 100)
-    );
+    const updatedGoal = state.savings.find((saving) => saving.id === goalId);
+    if (updatedGoal) {
+      updatedGoal.current += amount;
+    }
 
+    const current = updatedGoal?.current ?? amount;
+    const target = updatedGoal?.target ?? goal.target ?? amount;
+    const percent = Math.min(100, Math.round((current / target) * 100));
     const progressBar = buildProgressBar(percent);
 
     return {
       success: true,
-      message: `💰 Guardaste $${amount.toFixed(2)} MXN en "${goal.name}".\n${progressBar} ${percent}% de tu meta.\nSaldo restante: $${state.balance.toFixed(2)} MXN.`,
+      message: `Guardaste $${amount.toFixed(2)} MXN en "${updatedGoal?.name ?? goal.nickname ?? goal.name}".\n${progressBar} ${percent}% de tu meta.\nSaldo restante: $${state.balance.toFixed(2)} MXN.`,
       newBalance: state.balance,
-      updatedGoal: goal,
+      updatedGoal,
     };
-
   } catch (error: any) {
     return {
       success: false,
-      message: `❌ Error al depositar: ${error?.message || error}`,
+      message: `Error al depositar: ${error?.message || error}`,
     };
   }
 }
 
-
 function buildProgressBar(percent: number): string {
   const filled = Math.round(percent / 10);
-  return "█".repeat(filled) + "░".repeat(10 - filled);
+  return "#".repeat(filled) + "-".repeat(10 - filled);
 }
 
-// Formatea el estado completo para mostrárselo al usuario
 export function formatBalance(state: UserState): string {
-  let msg = `💳 Tu saldo: $${state.balance.toFixed(2)} MXN\n`;
+  let message = `Tu saldo: $${state.balance.toFixed(2)} MXN\n`;
   if (state.savings.length > 0) {
-    msg += "\n📦 Tus cajitas:\n";
-    for (const g of state.savings) {
-      const percent = Math.min(100, Math.round((g.current / g.target) * 100));
-      msg += `• ${g.name}: $${g.current.toFixed(2)} / $${g.target.toFixed(2)} (${percent}%)\n`;
+    message += "\nTus cajitas:\n";
+    for (const goal of state.savings) {
+      const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
+      message += `• ${goal.name}: $${goal.current.toFixed(2)} / $${goal.target.toFixed(2)} (${percent}%)\n`;
     }
   }
-  return msg.trim();
+  return message.trim();
 }

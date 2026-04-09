@@ -9,6 +9,7 @@ import {
   UserState,
 } from "./finance";
 import { listContactsForChat } from "./contacts";
+import { ensureStoredUserFinancialProfile, getStoredUserById } from "./users";
 
 export interface ProcessedChatMessage {
   reply: string;
@@ -21,14 +22,38 @@ export async function processUserMessage(
   userId?: string
 ): Promise<ProcessedChatMessage> {
   const state = await getSession(sessionId);
-  state.userId = userId ?? state.userId ?? sessionId;
 
   if (userId) {
     try {
+      const storedUser = await getStoredUserById(userId);
+      const hydratedUser = storedUser
+        ? await ensureStoredUserFinancialProfile(storedUser)
+        : undefined;
+
+      if (hydratedUser?.nessieId) {
+        state.userId = hydratedUser.nessieId;
+      } else {
+        state.userId = state.userId ?? sessionId;
+      }
+
+      if (hydratedUser?.nessieAccountId) {
+        state.accountId = hydratedUser.nessieAccountId;
+      }
+
+      if (
+        typeof hydratedUser?.balanceAvailable === "number" &&
+        !Number.isFinite(state.balance)
+      ) {
+        state.balance = hydratedUser.balanceAvailable;
+      }
+
       state.contacts = await listContactsForChat(userId);
     } catch (error) {
-      console.error("No se pudieron cargar los contactos reales para el chat:", error);
+      console.error("No se pudo hidratar la sesion real del chat:", error);
+      state.userId = state.userId ?? sessionId;
     }
+  } else {
+    state.userId = state.userId ?? sessionId;
   }
 
   let reply: string;
@@ -56,14 +81,52 @@ async function handlePendingConfirmation(
   message: string,
   state: UserState
 ): Promise<string> {
-  const intent = await parseIntent(message, state);
   const op = state.pendingOperation!;
+  const normalized = message.trim().toLowerCase();
+
+  if (["si", "sí", "confirmo", "dale", "ok", "va", "sale", "claro"].includes(normalized)) {
+    state.pendingOperation = null;
+
+    if (op.type === "transfer" && op.amount && op.recipient) {
+      const result = await executeTransfer(
+        state,
+        op.amount,
+        op.recipient,
+        op.recipientAccountId
+      );
+      return result.message;
+    }
+
+    if (op.type === "savings_create" && op.savingsGoalName && op.amount) {
+      const result = await createSavingsGoal(state, op.savingsGoalName, op.amount);
+      return result.message;
+    }
+
+    if (op.type === "savings_deposit" && op.savingsGoalId && op.amount) {
+      const result = await depositToSavings(state, op.savingsGoalId, op.amount);
+      return result.message;
+    }
+
+    return "Operacion confirmada.";
+  }
+
+  if (["no", "cancelar", "cancela", "mejor no"].includes(normalized)) {
+    state.pendingOperation = null;
+    return "Operacion cancelada. En que mas te puedo ayudar?";
+  }
+
+  const intent = await parseIntent(message, state);
 
   if (intent.type === "confirm") {
     state.pendingOperation = null;
 
     if (op.type === "transfer" && op.amount && op.recipient) {
-      const result = await executeTransfer(state, op.amount, op.recipient);
+      const result = await executeTransfer(
+        state,
+        op.amount,
+        op.recipient,
+        op.recipientAccountId
+      );
       return result.message;
     }
 
@@ -157,6 +220,7 @@ async function handleIntent(
         type: "transfer",
         amount: intent.amount,
         recipient: recipientName,
+        recipientAccountId: contact.accountId,
         description: `Vas a enviar *$${intent.amount.toFixed(2)} MXN* a *${recipientName}*.\n\nConfirmas? Escribe *si* o *no*.`,
       };
 

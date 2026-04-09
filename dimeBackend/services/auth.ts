@@ -12,6 +12,12 @@ import { createCustomer } from "../nessi/service/customerService";
 import { Customer } from "../nessi/models/customer";
 import { createAccount } from "../nessi/service/accountService";
 import { Account } from "../nessi/models/account";
+import {
+  ensureStoredUserFinancialProfile,
+  getStoredUserById,
+  saveStoredUser,
+  StoredUserRecord,
+} from "./users";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -24,6 +30,7 @@ const APP_CLIENT_ID = process.env.COGNITO_APP_CLIENT_ID ?? "";
 interface UserRecord {
   userId: string;
   nessieId?: string;
+  nessieAccountId?: string;
   cognitoUsername: string;
   email?: string;
   phone?: string;
@@ -134,12 +141,7 @@ async function saveUser(user: UserRecord): Promise<void> {
     return;
   }
 
-  await ddb.send(
-    new PutCommand({
-      TableName: USERS_TABLE,
-      Item: user,
-    })
-  );
+  await saveStoredUser(user as StoredUserRecord);
 }
 
 async function saveAuthSession(session: AuthSessionRecord): Promise<void> {
@@ -191,11 +193,12 @@ async function buildUserRecordFromClaimsSignup(
     balance: 0
   }
 
-  createAccount(nessieCustomerId, initialAccount);
+  const initialAccountResponse = await createAccount(nessieCustomerId, initialAccount);
   
   return {
     userId,
     nessieId: nessieCustomerId,
+    nessieAccountId: initialAccountResponse?.objectCreated?._id,
     cognitoUsername,
     email: normalizeEmail(claims.email),
     phone: normalizePhone(claims.phone_number),
@@ -220,16 +223,27 @@ async function buildUserRecordFromClaimsLogin(
     throw new Error("El token de Cognito no contiene la identidad esperada.");
   }
   
+  const existingUser = await getStoredUserById(userId);
+  const hydratedUser = existingUser
+    ? await ensureStoredUserFinancialProfile(existingUser)
+    : undefined;
+
   return {
     userId,
+    nessieId: hydratedUser?.nessieId,
+    nessieAccountId: hydratedUser?.nessieAccountId,
     cognitoUsername,
     email: normalizeEmail(claims.email),
     phone: normalizePhone(claims.phone_number),
     phoneVerified: false,
-    displayName: claims.name?.trim() || fallbackDisplayName || "Usuario Dime",
-    preferredLanguage: "es-MX",
-    balanceAvailable: 1500,
-    createdAt: now,
+    displayName:
+      claims.name?.trim() ||
+      hydratedUser?.displayName ||
+      fallbackDisplayName ||
+      "Usuario Dime",
+    preferredLanguage: hydratedUser?.preferredLanguage ?? "es-MX",
+    balanceAvailable: hydratedUser?.balanceAvailable ?? 1500,
+    createdAt: hydratedUser?.createdAt ?? now,
     updatedAt: now,
   };
 }
@@ -338,6 +352,7 @@ async function finalizeAuthResponseLogin(
   const claims = decodeIdToken(authResult.IdToken!);
   const user = await buildUserRecordFromClaimsLogin(claims, fallbackDisplayName);
   const session = await createLocalSession(claims);
+  await saveUser(user);
 
   return {
     user: sanitizeUser(user),
