@@ -10,15 +10,15 @@ const client = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(client);
 
 // Cache en memoria para desarrollo local / si DynamoDB no está disponible
-const memoryStore = new Map<string, UserState>();
+const memoryStore = new Map<string, any>();
 
 const TABLE = process.env.SESSIONS_TABLE ?? "";
 
-export async function getSession(sessionId: string): Promise<UserState> {
+export async function getSession(sessionId: string, customerId: string): Promise<UserState> {
   // Si no hay tabla configurada, usa memoria (útil para pruebas locales)
   if (!TABLE) {
     if (!memoryStore.has(sessionId)) {
-      memoryStore.set(sessionId, createInitialState(sessionId));
+      memoryStore.set(sessionId, await createInitialState(customerId));
     }
     return memoryStore.get(sessionId)!;
   }
@@ -31,7 +31,7 @@ export async function getSession(sessionId: string): Promise<UserState> {
       return result.Item as UserState;
     }
     // Usuario nuevo — estado inicial
-    return createInitialState(sessionId);
+    return createInitialState(customerId);
   } catch (err) {
     console.error("Error leyendo sesión de DynamoDB:", err);
     // Fallback a memoria si DynamoDB falla durante el hackathon

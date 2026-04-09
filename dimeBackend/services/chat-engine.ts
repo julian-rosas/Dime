@@ -18,9 +18,9 @@ export interface ProcessedChatMessage {
 export async function processUserMessage(
   sessionId: string,
   message: string,
-  userId?: string
+  userId: string
 ): Promise<ProcessedChatMessage> {
-  const state = await getSession(sessionId);
+  const state = await getSession(sessionId, userId);
   state.userId = userId ?? state.userId ?? sessionId;
 
   if (userId) {

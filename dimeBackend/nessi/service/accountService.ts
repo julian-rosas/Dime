@@ -28,6 +28,18 @@ export async function getAccountById(id: string) {
   }
 }
 
+export async function getAccountByCustomerId(id: string) {
+  try {
+    const apiKey = await getApiKey();
+    const res = await axios.get(`${BASE_URL}/customers/${id}/accounts`, {
+      params: { key: apiKey },
+    });
+    return res.data;
+  } catch (err: any) {
+    throw err.response?.data || err.message;
+  }
+}
+
 export async function updateAccount(id: string, newAccount: Account) {
   try {
     const apiKey = await getApiKey();

@@ -185,7 +185,7 @@ async function buildUserRecordFromClaimsSignup(
   const nessieCustomerId = nessieCustomer.objectCreated._id;
 
   const initialAccount: Account = {
-    type: "credit-card",
+    type:  "Credit Card",
     nickname: "libreton-basico",
     rewards: 0,
     balance: 0
