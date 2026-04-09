@@ -1,13 +1,13 @@
 import axios from "axios";
 import { getApiKey } from "../nessiUtils";
 
-const API_KEY = getApiKey();
-const BASE_URL = "http://api.reimaginebanking.com";
+const BASE_URL = "http://api.nessieisreal.com";
 
 export async function getAllAccountDeposits(id: string) {
   try {
+    const apiKey = await getApiKey();
     const res = await axios.get(`${BASE_URL}/accounts/${id}/deposits`, {
-      params: { key: API_KEY },
+      params: { key: apiKey },
     });
     return res.data;
   } catch (err: any) {
@@ -17,10 +17,11 @@ export async function getAllAccountDeposits(id: string) {
 
 export async function createAccountDeposit(id: string, newDeposit: any) {
   try {
+    const apiKey = await getApiKey();
     const res = await axios.post(
       `${BASE_URL}/accounts/${id}/deposits`,
       newDeposit,
-      { params: { key: API_KEY } }
+      { params: { key: apiKey } }
     );
     return res.data;
   } catch (err: any) {

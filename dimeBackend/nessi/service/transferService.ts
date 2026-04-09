@@ -1,14 +1,14 @@
 import axios from "axios";
 import { getApiKey } from "../nessiUtils";
 
-const API_KEY = getApiKey();
-const BASE_URL = "http://api.reimaginebanking.com";
+const BASE_URL = "http://api.nessieisreal.com";
 
 export async function getAllAccountTransfers(id: string) {
   try {
+    const apiKey = await getApiKey();
     const response = await axios.get(
       `${BASE_URL}/accounts/${id}/transfers`,
-      { params: { key: API_KEY } }
+      { params: { key: apiKey } }
     );
 
     return response.data;
@@ -19,9 +19,10 @@ export async function getAllAccountTransfers(id: string) {
 
 export async function getTransferById(transferId: string) {
   try {
+    const apiKey = await getApiKey();
     const response = await axios.get(
       `${BASE_URL}/transfers/${transferId}`,
-      { params: { key: API_KEY } }
+      { params: { key: apiKey } }
     );
 
     return response.data;
@@ -37,6 +38,7 @@ export async function createAccountTransfer(
   description: string = "Transfer"
 ) {
   try {
+    const apiKey = await getApiKey();
     const newTransfer = {
       medium: "balance",
       payee_id: toId,
@@ -49,7 +51,7 @@ export async function createAccountTransfer(
       `${BASE_URL}/accounts/${fromId}/transfers`,
       newTransfer,
       {
-        params: { key: API_KEY },
+        params: { key: apiKey },
         headers: { "Content-Type": "application/json" },
       }
     );
