@@ -9,7 +9,11 @@ import { processUserMessage } from "./chat-engine";
 import { UserState } from "./finance";
 import { getConversationRecord, updateConversation } from "./conversations";
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+  marshallOptions: {
+    removeUndefinedValues: true,
+  },
+});
 
 const CONVERSATION_MESSAGES_TABLE = process.env.CONVERSATION_MESSAGES_TABLE ?? "";
 

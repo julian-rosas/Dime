@@ -11,7 +11,11 @@ import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { Contact } from "./finance";
 import { ensureStoredUserFinancialProfile } from "./users";
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+  marshallOptions: {
+    removeUndefinedValues: true,
+  },
+});
 
 const USERS_TABLE = process.env.USERS_TABLE ?? "";
 const USER_CONTACTS_TABLE = process.env.USER_CONTACTS_TABLE ?? "";
