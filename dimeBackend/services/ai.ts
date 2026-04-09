@@ -302,6 +302,11 @@ function validateParsedIntent(intent: ParsedIntent, message: string, state: User
 
 // Construye el system prompt con el contexto del usuario y patrones del dataset sintético.
 function buildSystemPrompt(state: UserState): string {
+  const mainAccount = state.accounts?.find(
+    (account: any) => account.nickname === "libreton-basico"
+  );
+  const currentBalance = Number(mainAccount?.balance ?? 0);
+
   const contactList =
     state.contacts.length > 0
       ? state.contacts.map((c) => `- ${c.name} (alias: ${c.alias.join(", ")})`).join("\n")
@@ -320,7 +325,7 @@ Debes responder SOLO con un JSON válido que siga exactamente el esquema solicit
 No uses markdown. No expliques nada. No agregues texto antes ni después del JSON.
 
 CONTEXTO DEL USUARIO:
-- Saldo actual: $${state.balance.toFixed(2)} MXN
+- Saldo actual: $${currentBalance.toFixed(2)} MXN
 - Contactos registrados:
 ${contactList}
 - Cajitas de ahorro:

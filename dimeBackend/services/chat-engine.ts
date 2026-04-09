@@ -64,7 +64,12 @@ async function handlePendingConfirmation(
     state.pendingOperation = null;
 
     if (op.type === "transfer" && op.amount && op.recipient) {
-      const result = await executeTransfer(state, op.amount, op.recipient);
+      const result = await executeTransfer(
+        state,
+        op.amount,
+        op.recipient,
+        op.recipientName ?? "tu contacto"
+      );
       return result.message;
     }
 
@@ -154,10 +159,19 @@ async function handleIntent(
         return `No tengo a "${intent.recipient}" en tus contactos. Quieres que lo agregue o lo escribiste diferente?`;
       }
 
+      const recipientAccountId =
+        contact.primaryAccountId ??
+        await getContactAccountId(state.userId, intent.recipient);
+
+      if (!recipientAccountId) {
+        return `Encontre a *${recipientName}* en tus contactos, pero aun no tengo su cuenta lista para transferencias.`;
+      }
+
       state.pendingOperation = {
         type: "transfer",
         amount: intent.amount,
-        recipient: await getContactAccountId(state.userId, intent.recipient),
+        recipient: recipientAccountId,
+        recipientName,
         description: `Vas a enviar *$${intent.amount.toFixed(2)} MXN* a *${recipientName}*.\n\nConfirmas? Escribe *si* o *no*.`,
       };
 

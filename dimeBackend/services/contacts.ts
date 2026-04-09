@@ -22,6 +22,7 @@ interface UserRecord {
   phoneVerified?: boolean;
   displayName?: string;
   preferredLanguage?: string;
+  primaryAccountId?: string;
   balanceAvailable?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -288,6 +289,8 @@ export async function listContactsForChat(userId: string): Promise<Contact[]> {
       name: displayName,
       alias,
       phone: contact.contactUser.phone ?? undefined,
+      contactUserId: contact.contactUserId,
+      primaryAccountId: contact.contactUser.primaryAccountId ?? undefined,
     };
   });
 }
