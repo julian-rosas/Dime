@@ -192,7 +192,7 @@ async function buildUserRecordFromClaimsSignup(
     balance: 0
   };
 
-  const nessieAccount = createAccount(nessieCustomerId, initialAccount);
+  const nessieAccount = await createAccount(nessieCustomerId, initialAccount);
   const primaryAccountId = nessieAccount?.objectCreated?._id;
   
   return {
