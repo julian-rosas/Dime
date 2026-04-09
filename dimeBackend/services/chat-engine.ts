@@ -8,6 +8,7 @@ import {
   resolveContact,
   UserState,
 } from "./finance";
+import { listContactsForChat } from "./contacts";
 
 export interface ProcessedChatMessage {
   reply: string;
@@ -21,6 +22,14 @@ export async function processUserMessage(
 ): Promise<ProcessedChatMessage> {
   const state = await getSession(sessionId);
   state.userId = userId ?? state.userId ?? sessionId;
+
+  if (userId) {
+    try {
+      state.contacts = await listContactsForChat(userId);
+    } catch (error) {
+      console.error("No se pudieron cargar los contactos reales para el chat:", error);
+    }
+  }
 
   let reply: string;
   if (state.pendingOperation) {
