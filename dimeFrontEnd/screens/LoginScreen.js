@@ -1,11 +1,37 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform,
+  Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
+import { login } from '../services/api';
 
-export default function LoginScreen({ navigation }) {
-  const [phone, setPhone] = useState('');
+export default function LoginScreen({ navigation, onAuthenticated }) {
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = async () => {
+    if (!identifier.trim() || !password.trim()) {
+      setError('Escribe tu correo o teléfono y tu contraseña.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const result = await login({
+        identifier: identifier.trim(),
+        password,
+      });
+
+      onAuthenticated(result);
+    } catch (err) {
+      setError(err.message || 'No se pudo iniciar sesión.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -18,14 +44,14 @@ export default function LoginScreen({ navigation }) {
 
       <Text style={styles.title}>Iniciar Sesión</Text>
 
-      <Text style={styles.label}>Número de Teléfono</Text>
+      <Text style={styles.label}>Correo o Teléfono</Text>
       <TextInput
         style={styles.input}
-        placeholder="+1 (555) 000-0000"
+        placeholder="julian@example.com o +525512345678"
         placeholderTextColor="#aaa"
-        keyboardType="phone-pad"
-        value={phone}
-        onChangeText={setPhone}
+        autoCapitalize="none"
+        value={identifier}
+        onChangeText={setIdentifier}
       />
 
       <Text style={styles.label}>Contraseña</Text>
@@ -38,11 +64,18 @@ export default function LoginScreen({ navigation }) {
         onChangeText={setPassword}
       />
 
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
       <TouchableOpacity
-        style={styles.button}
-        onPress={() => navigation.navigate('Home')}
+        style={[styles.button, isSubmitting && styles.buttonDisabled]}
+        onPress={handleLogin}
+        disabled={isSubmitting}
       >
-        <Text style={styles.buttonText}>Iniciar Sesión</Text>
+        {isSubmitting ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Iniciar Sesión</Text>
+        )}
       </TouchableOpacity>
     </KeyboardAvoidingView>
   );
@@ -96,5 +129,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  errorText: {
+    color: '#d62839',
+    marginTop: 16,
+    fontSize: 14,
   },
 });
