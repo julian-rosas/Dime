@@ -317,6 +317,7 @@ export class DimeStack extends cdk.Stack {
       );
 
       const meResource = api.root.addResource("me");
+      const walletResource = meResource.addResource("wallet");
       const conversationsResource = meResource.addResource("conversations");
       const contactsResource = meResource.addResource("contacts");
       const conversationByIdResource =
@@ -401,6 +402,14 @@ export class DimeStack extends cdk.Stack {
         { authorizer: tokenAuthorizer }
       );
 
+      walletResource.addMethod(
+        "GET",
+        new apigateway.LambdaIntegration(messageHandler, {
+          requestTemplates: { "application/json": '{ "statusCode": "200" }' },
+        }),
+        { authorizer: tokenAuthorizer }
+      );
+
       contactByIdResource.addMethod(
         "GET",
         new apigateway.LambdaIntegration(messageHandler, {
@@ -457,6 +466,11 @@ export class DimeStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ContactsEndpoint", {
       value: `${api.url}me/contacts`,
       description: "GET/POST endpoint para gestionar contactos del usuario",
+    });
+
+    new cdk.CfnOutput(this, "WalletEndpoint", {
+      value: `${api.url}me/wallet`,
+      description: "GET endpoint para consultar la wallet del usuario",
     });
 
     new cdk.CfnOutput(this, "ConversationsEndpoint", {
