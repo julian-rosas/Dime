@@ -9,6 +9,7 @@ import {
   UserState,
 } from "./finance";
 import { listContactsForChat } from "./contacts";
+import { getContactAccountId } from "./getAccountContact";
 
 export interface ProcessedChatMessage {
   reply: string;
@@ -156,7 +157,7 @@ async function handleIntent(
       state.pendingOperation = {
         type: "transfer",
         amount: intent.amount,
-        recipient: recipientName,
+        recipient: await getContactAccountId(state.userId, intent.recipient),
         description: `Vas a enviar *$${intent.amount.toFixed(2)} MXN* a *${recipientName}*.\n\nConfirmas? Escribe *si* o *no*.`,
       };
 
