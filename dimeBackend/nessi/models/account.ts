@@ -3,6 +3,5 @@ export interface Account {
     nickname: string;
     rewards: number;
     balance: number;
-    account_number: string;
   }
   

@@ -25,7 +25,7 @@ async function getAllAccounts() {
   }
 }
 
-async function getAccountById(id: string) {
+export async function getAccountById(id: string) {
   try {
     const res = await axios.get(`${BASE_URL}/accounts/${id}`, {
       params: { key: API_KEY },
@@ -60,6 +60,15 @@ async function deleteAccount(id: string, account: Account) {
   }
 }
 
-async function createAccount(id: string) {
-
+export async function createAccount(customerId: string, account: any) {
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/customers/${customerId}/accounts`,
+    account,
+      { params: { key: API_KEY } }
+    );
+    return response.data;
+  } catch (err: any) {
+    throw err.response?.data || err.message
+  }
 }
