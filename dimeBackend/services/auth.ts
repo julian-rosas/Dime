@@ -8,6 +8,10 @@ import {
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import jwt from "jsonwebtoken";
+import { createCustomer } from "../nessi/service/customerService";
+import { Customer } from "../nessi/models/customer";
+import { createAccount } from "../nessi/service/accountService";
+import { Account } from "../nessi/models/account";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -19,6 +23,7 @@ const APP_CLIENT_ID = process.env.COGNITO_APP_CLIENT_ID ?? "";
 
 interface UserRecord {
   userId: string;
+  nessieId?: string;
   cognitoUsername: string;
   email?: string;
   phone?: string;
@@ -56,6 +61,8 @@ export interface SignupInput {
   phone?: string;
   password: string;
   displayName?: string;
+  firstName: string;
+  lastName: string;
 }
 
 export interface LoginInput {
@@ -148,10 +155,12 @@ async function saveAuthSession(session: AuthSessionRecord): Promise<void> {
   );
 }
 
-function buildUserRecordFromClaims(
+async function buildUserRecordFromClaimsSignup(
   claims: CognitoClaims,
+  firstName: string,
+  lastName: string,
   fallbackDisplayName?: string
-): UserRecord {
+): Promise<UserRecord> {
   const now = new Date().toISOString();
   const userId = claims.sub;
   const cognitoUsername = claims["cognito:username"];
@@ -160,6 +169,56 @@ function buildUserRecordFromClaims(
     throw new Error("El token de Cognito no contiene la identidad esperada.");
   }
 
+  const customer: Customer = {
+    first_name: firstName,
+    last_name: lastName,
+    address : {
+      "street_number": "98",
+      "street_name": "saturno",
+      "city": "chalco",
+      "state": "IN",
+      "zip": "99999"
+    }
+  } 
+
+  const nessieCustomer = await createCustomer(customer);
+  
+  const initialAccount: Account = {
+    type: "credit-card",
+    nickname: "libreton-basico",
+    rewards: 0,
+    balance: 0
+  }
+
+  createAccount(nessieCustomer._id, initialAccount);
+  
+  return {
+    userId,
+    nessieId: nessieCustomer._id,
+    cognitoUsername,
+    email: normalizeEmail(claims.email),
+    phone: normalizePhone(claims.phone_number),
+    phoneVerified: false,
+    displayName: claims.name?.trim() || fallbackDisplayName || "Usuario Dime",
+    preferredLanguage: "es-MX",
+    balanceAvailable: 1500,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+async function buildUserRecordFromClaimsLogin(
+  claims: CognitoClaims,
+  fallbackDisplayName?: string
+): Promise<UserRecord> {
+  const now = new Date().toISOString();
+  const userId = claims.sub;
+  const cognitoUsername = claims["cognito:username"];
+
+  if (!userId || !cognitoUsername) {
+    throw new Error("El token de Cognito no contiene la identidad esperada.");
+  }
+  
   return {
     userId,
     cognitoUsername,
@@ -247,12 +306,14 @@ function mapCognitoError(error: unknown): never {
   }
 }
 
-async function finalizeAuthResponse(
+async function finalizeAuthResponseSignup(
   authResult: Awaited<ReturnType<typeof authenticateWithCognito>>,
+  firstName: string,
+  lastName: string,
   fallbackDisplayName?: string
 ) {
   const claims = decodeIdToken(authResult.IdToken!);
-  const user = buildUserRecordFromClaims(claims, fallbackDisplayName);
+  const user = await buildUserRecordFromClaimsSignup(claims, firstName, lastName, fallbackDisplayName);
   const session = await createLocalSession(claims);
 
   await saveUser(user);
@@ -269,9 +330,31 @@ async function finalizeAuthResponse(
   };
 }
 
+async function finalizeAuthResponseLogin(
+  authResult: Awaited<ReturnType<typeof authenticateWithCognito>>,
+  fallbackDisplayName?: string
+) {
+  const claims = decodeIdToken(authResult.IdToken!);
+  const user = await buildUserRecordFromClaimsLogin(claims, fallbackDisplayName);
+  const session = await createLocalSession(claims);
+
+  return {
+    user: sanitizeUser(user),
+    sessionId: session.sessionId,
+    expiresAt: session.expiresAt,
+    token: authResult.IdToken,
+    idToken: authResult.IdToken,
+    accessToken: authResult.AccessToken,
+    refreshToken: authResult.RefreshToken ?? null,
+    tokenType: authResult.TokenType ?? "Bearer",
+  };
+}
+
 export async function signup(input: SignupInput) {
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phone);
+  const firstName = input.firstName;
+  const lastName = input.lastName;
   const password = validatePassword(input.password);
   const displayName = input.displayName?.trim() || "Usuario Dime";
   const username = getUsername(email, phone);
@@ -302,7 +385,7 @@ export async function signup(input: SignupInput) {
     );
 
     const authResult = await authenticateWithCognito(username, password);
-    return finalizeAuthResponse(authResult, displayName);
+    return finalizeAuthResponseSignup(authResult, firstName, lastName, displayName);
   } catch (error) {
     mapCognitoError(error);
   }
@@ -318,7 +401,7 @@ export async function login(input: LoginInput) {
 
   try {
     const authResult = await authenticateWithCognito(identifier, password);
-    return finalizeAuthResponse(authResult);
+    return finalizeAuthResponseLogin(authResult);
   } catch (error) {
     mapCognitoError(error);
   }
