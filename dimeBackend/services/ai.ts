@@ -454,31 +454,12 @@ function fallbackParse(message: string): ParsedIntent {
     return { type: "help", confidence: "high" };
   }
 
-  const savingsCreateGoalAndTargetMatch = lower.match(
-    /(.+?)\s+(?:meta|objetivo)\s+\$?([\d,]+(?:\.\d{1,2})?)/
-  );
-  if (savingsCreateGoalAndTargetMatch) {
-    return {
-      type: "savings_create",
-      savingsGoalName: savingsCreateGoalAndTargetMatch[1]
-        .replace(/^(?:quiero\s+)?(?:ahorrar|apartar(?:\s+dinero)?|guardar|juntar)(?:\s+un\s+poco\s+de\s+dinero|\s+dinero|\s+lana|\s+varos)?\s+para\s+/i, "")
-        .replace(/^(para|de|el|la|los|las|un|una)\s+/i, "")
-        .replace(/[,\s]+$/g, "")
-        .replace(/\s+/g, " ")
-        .trim(),
-      savingsTarget: parseFloat(savingsCreateGoalAndTargetMatch[2].replace(/,/g, "")),
-      confidence: "high",
-    };
-  }
-
   const savingsCreateWithGoalMatch = lower.match(
     /(?:quiero\s+)?(?:ahorrar|apartar(?:\s+dinero)?|guardar|juntar)(?:\s+un\s+poco\s+de\s+dinero|\s+dinero|\s+lana|\s+varos)?\s+para\s+(.+)/
   );
   if (savingsCreateWithGoalMatch) {
     const savingsGoalName = savingsCreateWithGoalMatch[1]
-      .replace(/\s+(?:meta|objetivo)\s+\$?[\d,]+(?:\.\d{1,2})?.*$/i, "")
       .replace(/^(el|la|los|las|un|una)\s+/i, "")
-      .replace(/[,\s]+$/g, "")
       .replace(/\s+/g, " ")
       .trim();
 
@@ -486,6 +467,21 @@ function fallbackParse(message: string): ParsedIntent {
       type: "savings_create",
       savingsGoalName: savingsGoalName || undefined,
       confidence: "low",
+    };
+  }
+
+  const savingsCreateGoalAndTargetMatch = lower.match(
+    /(.+?)\s+(?:meta|objetivo)\s+\$?([\d,]+(?:\.\d{1,2})?)/
+  );
+  if (savingsCreateGoalAndTargetMatch) {
+    return {
+      type: "savings_create",
+      savingsGoalName: savingsCreateGoalAndTargetMatch[1]
+        .replace(/^(para|de|el|la|los|las|un|una)\s+/i, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+      savingsTarget: parseFloat(savingsCreateGoalAndTargetMatch[2].replace(/,/g, "")),
+      confidence: "high",
     };
   }
 
