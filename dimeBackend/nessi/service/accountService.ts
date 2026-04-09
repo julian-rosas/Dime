@@ -5,16 +5,7 @@ import { Account } from "aws-sdk";
 const API_KEY = getApiKey();
 const BASE_URL = "http://api.reimaginebanking.com";
 
-let service: any = {};
-
-service.getAllAccounts = getAllAccounts;
-service.getAccountById = getAccountById;
-service.updateAccount = updateAccount;
-service.deleteAccount = deleteAccount;
-
-module.exports = service;
-
-async function getAllAccounts() {
+export async function getAllAccounts() {
   try {
     const res = await axios.get(`${BASE_URL}/accounts`, {
       params: { key: API_KEY },
@@ -36,7 +27,7 @@ export async function getAccountById(id: string) {
   }
 }
 
-async function updateAccount(id: string, newAccount: Account) {
+export async function updateAccount(id: string, newAccount: Account) {
   try {
     const res = await axios.put(
       `${BASE_URL}/accounts/${id}`,
@@ -49,7 +40,7 @@ async function updateAccount(id: string, newAccount: Account) {
   }
 }
 
-async function deleteAccount(id: string, account: Account) {
+export async function deleteAccount(id: string, account: Account) {
   try {
     const res = await axios.delete(`${BASE_URL}/accounts/${id}`, {
       params: { key: API_KEY },

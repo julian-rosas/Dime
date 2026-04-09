@@ -4,14 +4,7 @@ import { getApiKey } from "../nessiUtils";
 const API_KEY = getApiKey();
 const BASE_URL = "http://api.reimaginebanking.com";
 
-let service: any = {};
-
-service.getAllAccountDeposits = getAllAccountDeposits;
-service.createAccountDeposit = createAccountDeposit;
-
-module.exports = service;
-
-async function getAllAccountDeposits(id: string) {
+export async function getAllAccountDeposits(id: string) {
   try {
     const res = await axios.get(`${BASE_URL}/accounts/${id}/deposits`, {
       params: { key: API_KEY },
@@ -22,7 +15,7 @@ async function getAllAccountDeposits(id: string) {
   }
 }
 
-async function createAccountDeposit(id: string, newDeposit: any) {
+export async function createAccountDeposit(id: string, newDeposit: any) {
   try {
     const res = await axios.post(
       `${BASE_URL}/accounts/${id}/deposits`,
