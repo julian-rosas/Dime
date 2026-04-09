@@ -99,6 +99,13 @@ function formatAssistantMessage(message) {
   return message;
 }
 
+function sanitizePhoneInput(value) {
+  const cleaned = String(value || '').replace(/[^\d+]/g, '');
+  const startsWithPlus = cleaned.startsWith('+');
+  const digitsOnly = cleaned.replace(/\+/g, '');
+  return `${startsWithPlus ? '+' : ''}${digitsOnly}`;
+}
+
 function renderMessageWithBold(text, baseStyle, boldStyle) {
   const content = String(text || '');
   const parts = content.split(/(\*[^*]+\*)/g);
@@ -1276,7 +1283,7 @@ function ContactsTab({
               placeholder="Teléfono del contacto"
               placeholderTextColor="#98a2b3"
               value={contactPhone}
-              onChangeText={setContactPhone}
+              onChangeText={(value) => setContactPhone(sanitizePhoneInput(value))}
               keyboardType="phone-pad"
             />
             <TouchableOpacity style={styles.secondarySearchButton} onPress={onSearchByContactDetails}>

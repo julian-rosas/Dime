@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { Fragment, useState } from 'react';
 import {
   Text,
   TextInput,
@@ -17,6 +17,8 @@ export default function LoginScreen({ navigation, onAuthenticated }) {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const RootWrapper = Platform.OS === 'web' ? Fragment : TouchableWithoutFeedback;
+  const rootWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss };
 
   const handleLogin = async () => {
     if (!identifier.trim() || !password.trim()) {
@@ -45,7 +47,7 @@ export default function LoginScreen({ navigation, onAuthenticated }) {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <RootWrapper {...rootWrapperProps}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -93,7 +95,7 @@ export default function LoginScreen({ navigation, onAuthenticated }) {
           )}
         </TouchableOpacity>
       </KeyboardAvoidingView>
-    </TouchableWithoutFeedback>
+    </RootWrapper>
   );
 }
 
