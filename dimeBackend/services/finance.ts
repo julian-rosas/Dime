@@ -165,15 +165,16 @@ export async function executeTransfer(
     await refreshAccounts(state);
 
     const updatedMain = getMainAccount(state);
+    const newBalance = mainAccount.balance - amount;
 
     return {
       success: true,
       message: `✅ Transferiste $${amount.toFixed(
         2
-      )} MXN a ${recipientName}. Tu nuevo saldo es $${updatedMain.balance.toFixed(
+      )} MXN a ${recipientName}. Tu nuevo saldo es $${newBalance.toFixed(
         2
       )} MXN.`,
-      newBalance: updatedMain.balance,
+      newBalance: newBalance,
     };
   } catch (error: any) {
     return {
