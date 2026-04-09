@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
+  Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, TouchableWithoutFeedback, Keyboard,
 } from 'react-native';
 import { login } from '../services/api';
 
@@ -34,50 +34,52 @@ export default function LoginScreen({ navigation, onAuthenticated }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
-        <Text style={styles.backText}>← Volver</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.title}>Iniciar Sesión</Text>
-
-      <Text style={styles.label}>Correo o Teléfono</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="julian@example.com o +525512345678"
-        placeholderTextColor="#aaa"
-        autoCapitalize="none"
-        value={identifier}
-        onChangeText={setIdentifier}
-      />
-
-      <Text style={styles.label}>Contraseña</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="••••••••"
-        placeholderTextColor="#aaa"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
-
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-      <TouchableOpacity
-        style={[styles.button, isSubmitting && styles.buttonDisabled]}
-        onPress={handleLogin}
-        disabled={isSubmitting}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {isSubmitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Iniciar Sesión</Text>
-        )}
-      </TouchableOpacity>
-    </KeyboardAvoidingView>
+        <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
+          <Text style={styles.backText}>← Volver</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.title}>Iniciar Sesión</Text>
+
+        <Text style={styles.label}>Correo o Teléfono</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="julian@example.com o +525512345678"
+          placeholderTextColor="#aaa"
+          autoCapitalize="none"
+          value={identifier}
+          onChangeText={setIdentifier}
+        />
+
+        <Text style={styles.label}>Contraseña</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="••••••••"
+          placeholderTextColor="#aaa"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <TouchableOpacity
+          style={[styles.button, isSubmitting && styles.buttonDisabled]}
+          onPress={handleLogin}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Iniciar Sesión</Text>
+          )}
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -103,7 +105,7 @@ const styles = StyleSheet.create({
     marginBottom: 36,
   },
   label: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#444',
     marginBottom: 8,
     marginTop: 16,
@@ -115,7 +117,7 @@ const styles = StyleSheet.create({
     borderColor: '#dde4f0',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 15,
+    fontSize: 16,
     color: '#1a1a2e',
   },
   button: {
@@ -136,6 +138,6 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#d62839',
     marginTop: 16,
-    fontSize: 14,
+    fontSize: 16,
   },
 });

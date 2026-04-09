@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, SafeAreaView, Platform, StatusBar, ActivityIndicator,
+  TextInput, SafeAreaView, Platform, StatusBar, ActivityIndicator, Keyboard, TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
@@ -48,6 +48,102 @@ function formatMessageTime(value) {
   });
 }
 
+function getConversationSummary(conversation) {
+  const pending = conversation?.linkedPendingOperation;
+  const preview = conversation?.lastMessagePreview?.trim();
+  const extractPersonName = (value) => {
+    if (!value) {
+      return '';
+    }
+
+    const directQuoted = value.match(/"([^"]+)"/);
+    if (directQuoted?.[1]) {
+      return directQuoted[1].trim();
+    }
+
+    const afterATransfer = value.match(/\ba\s+([A-Za-zÁÉÍÓÚáéíóúÑñ ]{2,})(?:[?.!,]|$)/i);
+    if (afterATransfer?.[1]) {
+      return afterATransfer[1].trim().split(/\s+/).slice(0, 2).join(' ');
+    }
+
+    const cleaned = value
+      .replace(/^[¿?¡!]+|[¿?¡!]+$/g, '')
+      .replace(/\b(no tengo a|quieres que lo agregue|o lo escribiste diferente|tambien puedo|también puedo|ayudarte|ver tu saldo|empezar un ahorro|dime que prefieres)\b.*$/i, '')
+      .replace(/\b(transferir|depositar|depositarle|enviar|mandar|pesos|mxn|a|de|para)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const words = cleaned
+      .split(' ')
+      .filter(Boolean)
+      .filter((word) => /^[A-Za-zÁÉÍÓÚáéíóúÑñ]+$/.test(word));
+
+    return words.slice(-2).join(' ').trim();
+  };
+
+  if (pending?.type === 'transfer') {
+    return {
+      title: 'Deposito',
+      subtitle: extractPersonName(pending.recipient) || 'Destinatario pendiente',
+    };
+  }
+
+  if (pending?.type === 'savings_create') {
+    return {
+      title: 'Crear cajita',
+      subtitle: pending.savingsGoalName || 'Meta pendiente',
+    };
+  }
+
+  if (pending?.type === 'savings_deposit') {
+    return {
+      title: 'Deposito',
+      subtitle: 'A tu ahorro',
+    };
+  }
+
+  if (!preview) {
+    return {
+      title: conversation?.title || 'Nuevo chat',
+      subtitle: 'Sin destinatario',
+    };
+  }
+
+  if (/transfer|enviar|mandar|depositar/i.test(preview)) {
+    return {
+      title: 'Deposito',
+      subtitle: extractPersonName(preview) || 'Destinatario',
+    };
+  }
+
+  const savingsCreateMatch = preview.match(/cajita\s+\*?"?([^"*.\n]+)"?/i);
+  if (savingsCreateMatch) {
+    return {
+      title: 'Crear cajita',
+      subtitle: extractAmount(preview) || 'Sin monto',
+    };
+  }
+
+  if (/guardar|ahorro|cajita/i.test(preview)) {
+    return {
+      title: 'Deposito a ahorro',
+      subtitle: 'A tu ahorro',
+    };
+  }
+
+  if (/saldo|cuanto tengo|dinero disponible/i.test(preview)) {
+    return {
+      title: 'Consulta de saldo',
+      subtitle: 'Cuenta principal',
+    };
+  }
+
+  return {
+    title: conversation?.title || 'Operacion',
+    subtitle: extractPersonName(preview) || 'Sin destinatario',
+  };
+}
+
 function getSpeechRecognition() {
   if (typeof window === 'undefined') {
     return null;
@@ -56,9 +152,41 @@ function getSpeechRecognition() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
+function speakOnWeb(text) {
+  if (typeof window === 'undefined' || !window.speechSynthesis) {
+    return false;
+  }
+
+  const trimmed = text?.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const utterance = new SpeechSynthesisUtterance(trimmed);
+  const voices = window.speechSynthesis.getVoices?.() || [];
+  const spanishVoice = voices.find(
+    (voice) => voice.lang?.toLowerCase().startsWith('es')
+  );
+
+  utterance.lang = spanishVoice?.lang || 'es-MX';
+  if (spanishVoice) {
+    utterance.voice = spanishVoice;
+  }
+  utterance.rate = 0.95;
+  utterance.pitch = 1;
+
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+  return true;
+}
+
 function speakAssistantMessage(text) {
   const trimmed = text?.trim();
   if (!trimmed) {
+    return;
+  }
+
+  if (Platform.OS === 'web' && speakOnWeb(trimmed)) {
     return;
   }
 
@@ -162,6 +290,23 @@ export default function HomeScreen({ navigation, session, onLogout }) {
       isMounted = false;
     };
   }, [navigation, session]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.speechSynthesis) {
+      return undefined;
+    }
+
+    const loadVoices = () => {
+      window.speechSynthesis.getVoices?.();
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
 
   useEffect(() => {
     const latestAssistantMessage = [...messages]
@@ -378,7 +523,11 @@ export default function HomeScreen({ navigation, session, onLogout }) {
     const SpeechRecognition = getSpeechRecognition();
 
     if (!SpeechRecognition) {
-      setScreenError('Tu navegador no soporta transcripcion por voz.');
+      setScreenError(
+        Platform.OS === 'web'
+          ? 'Este navegador no soporta transcripcion por voz.'
+          : 'El dictado por voz ahorita solo funciona en web con Chrome o Edge. En la app puedes seguir escribiendo y escuchar las respuestas.'
+      );
       return;
     }
 
@@ -505,91 +654,93 @@ export default function HomeScreen({ navigation, session, onLogout }) {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" />
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" />
 
-      <View style={styles.content}>
-        {activeTab === 'wallet' && (
-          <WalletTab
-            user={session?.user}
-            walletState={walletState}
-            conversationCount={conversationCount}
-            onLogout={onLogout}
-          />
-        )}
-        {activeTab === 'chat' && (
-          <ChatTab
-            conversations={conversations}
-            conversationId={conversationId}
-            messages={messages}
-            inputText={inputText}
-            setInputText={setInputText}
-            isRecording={isRecording}
-            isSending={isSending}
-            isCreatingConversation={isCreatingConversation}
-            editingConversationId={editingConversationId}
-            conversationDraftTitle={conversationDraftTitle}
-            setConversationDraftTitle={setConversationDraftTitle}
-            isArchivingConversation={isArchivingConversation}
-            onCreateConversation={handleCreateConversation}
-            onSelectConversation={handleSelectConversation}
-            onStartEditingConversation={handleStartEditingConversation}
-            onSaveConversationTitle={handleSaveConversationTitle}
-            onCancelEditingConversation={() => {
-              setEditingConversationId('');
-              setConversationDraftTitle('');
-            }}
-            onArchiveConversation={handleArchiveConversation}
-            onSend={sendMessage}
-            onMic={handleVoiceInput}
-            onReplaySpeech={() => speakAssistantMessage(lastAssistantReply)}
-            lastAssistantReply={lastAssistantReply}
-            screenError={screenError}
-            isBootstrapping={isBootstrapping}
-          />
-        )}
-        {activeTab === 'contacts' && (
-          <ContactsTab
-            contacts={contacts}
-            isBootstrapping={isBootstrapping}
-            screenError={contactsError || screenError}
-            contactSearchText={contactSearchText}
-            setContactSearchText={setContactSearchText}
-            onSearchContacts={handleSearchContacts}
-            searchResults={searchResults}
-            isSearchingContacts={isSearchingContacts}
-            onAddContact={handleAddContact}
-            isAddingContact={isAddingContact}
-            showContactFallbackForm={showContactFallbackForm}
-            contactEmptyState={contactEmptyState}
-            contactEmail={contactEmail}
-            setContactEmail={setContactEmail}
-            contactPhone={contactPhone}
-            setContactPhone={setContactPhone}
-            onSearchByContactDetails={handleSearchByContactDetails}
-          />
-        )}
-      </View>
+        <View style={styles.content}>
+          {activeTab === 'wallet' && (
+            <WalletTab
+              user={session?.user}
+              walletState={walletState}
+              conversationCount={conversationCount}
+              onLogout={onLogout}
+            />
+          )}
+          {activeTab === 'chat' && (
+            <ChatTab
+              conversations={conversations}
+              conversationId={conversationId}
+              messages={messages}
+              inputText={inputText}
+              setInputText={setInputText}
+              isRecording={isRecording}
+              isSending={isSending}
+              isCreatingConversation={isCreatingConversation}
+              editingConversationId={editingConversationId}
+              conversationDraftTitle={conversationDraftTitle}
+              setConversationDraftTitle={setConversationDraftTitle}
+              isArchivingConversation={isArchivingConversation}
+              onCreateConversation={handleCreateConversation}
+              onSelectConversation={handleSelectConversation}
+              onStartEditingConversation={handleStartEditingConversation}
+              onSaveConversationTitle={handleSaveConversationTitle}
+              onCancelEditingConversation={() => {
+                setEditingConversationId('');
+                setConversationDraftTitle('');
+              }}
+              onArchiveConversation={handleArchiveConversation}
+              onSend={sendMessage}
+              onMic={handleVoiceInput}
+              onReplaySpeech={() => speakAssistantMessage(lastAssistantReply)}
+              lastAssistantReply={lastAssistantReply}
+              screenError={screenError}
+              isBootstrapping={isBootstrapping}
+            />
+          )}
+          {activeTab === 'contacts' && (
+            <ContactsTab
+              contacts={contacts}
+              isBootstrapping={isBootstrapping}
+              screenError={contactsError || screenError}
+              contactSearchText={contactSearchText}
+              setContactSearchText={setContactSearchText}
+              onSearchContacts={handleSearchContacts}
+              searchResults={searchResults}
+              isSearchingContacts={isSearchingContacts}
+              onAddContact={handleAddContact}
+              isAddingContact={isAddingContact}
+              showContactFallbackForm={showContactFallbackForm}
+              contactEmptyState={contactEmptyState}
+              contactEmail={contactEmail}
+              setContactEmail={setContactEmail}
+              contactPhone={contactPhone}
+              setContactPhone={setContactPhone}
+              onSearchByContactDetails={handleSearchByContactDetails}
+            />
+          )}
+        </View>
 
-      <View style={styles.tabBar}>
-        <TabButton
-          icon="wallet-outline"
-          active={activeTab === 'wallet'}
-          onPress={() => setActiveTab('wallet')}
-        />
-        <TabButton
-          icon="sparkles-outline"
-          active={activeTab === 'chat'}
-          onPress={() => setActiveTab('chat')}
-          isCenter
-        />
-        <TabButton
-          icon="book-outline"
-          active={activeTab === 'contacts'}
-          onPress={() => setActiveTab('contacts')}
-        />
-      </View>
-    </SafeAreaView>
+        <View style={styles.tabBar}>
+          <TabButton
+            icon="wallet-outline"
+            active={activeTab === 'wallet'}
+            onPress={() => setActiveTab('wallet')}
+          />
+          <TabButton
+            icon="sparkles-outline"
+            active={activeTab === 'chat'}
+            onPress={() => setActiveTab('chat')}
+            isCenter
+          />
+          <TabButton
+            icon="book-outline"
+            active={activeTab === 'contacts'}
+            onPress={() => setActiveTab('contacts')}
+          />
+        </View>
+      </SafeAreaView>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -747,6 +898,20 @@ function ChatTab({
             onPress={() => onSelectConversation(conversation.conversationId)}
           >
             <View style={styles.conversationPillBody}>
+              {editingConversationId !== conversation.conversationId ? (
+                <TouchableOpacity
+                  onPress={() => onArchiveConversation(conversation.conversationId)}
+                  style={[styles.conversationIconBtn, styles.conversationArchiveBtn, styles.conversationTrashInside]}
+                  disabled={isArchivingConversation === conversation.conversationId}
+                >
+                  {isArchivingConversation === conversation.conversationId ? (
+                    <ActivityIndicator color="#1a3a6e" size="small" />
+                  ) : (
+                    <Ionicons name="trash-outline" size={34} color="#8b1e2d" />
+                  )}
+                </TouchableOpacity>
+              ) : null}
+
               {editingConversationId === conversation.conversationId ? (
                 <TextInput
                   style={styles.conversationTitleInput}
@@ -756,23 +921,25 @@ function ChatTab({
                   autoFocus
                 />
               ) : (
-                <Text
-                  style={[
-                    styles.conversationPillTitle,
-                    conversation.conversationId === conversationId && styles.conversationPillTitleActive,
-                  ]}
-                >
-                  {conversation.title || 'Nuevo chat'}
-                </Text>
+                <>
+                  <Text
+                    style={[
+                      styles.conversationPillTitle,
+                      conversation.conversationId === conversationId && styles.conversationPillTitleActive,
+                    ]}
+                  >
+                    {getConversationSummary(conversation).title}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.conversationPreview,
+                      conversation.conversationId === conversationId && styles.conversationPreviewActive,
+                    ]}
+                  >
+                    {getConversationSummary(conversation).subtitle}
+                  </Text>
+                </>
               )}
-              <Text
-                style={[
-                  styles.conversationPreview,
-                  conversation.conversationId === conversationId && styles.conversationPreviewActive,
-                ]}
-              >
-                {conversation.lastMessagePreview || 'Sin mensajes'}
-              </Text>
             </View>
             {editingConversationId === conversation.conversationId ? (
               <View style={styles.conversationActions}>
@@ -784,25 +951,7 @@ function ChatTab({
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.conversationActions}>
-                <TouchableOpacity
-                  onPress={() => onStartEditingConversation(conversation)}
-                  style={styles.conversationIconBtn}
-                >
-                  <Ionicons name="pencil" size={14} color="#1a3a6e" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => onArchiveConversation(conversation.conversationId)}
-                  style={styles.conversationIconBtn}
-                  disabled={isArchivingConversation === conversation.conversationId}
-                >
-                  {isArchivingConversation === conversation.conversationId ? (
-                    <ActivityIndicator color="#1a3a6e" size="small" />
-                  ) : (
-                    <Ionicons name="archive-outline" size={14} color="#8b1e2d" />
-                  )}
-                </TouchableOpacity>
-              </View>
+              <View style={styles.conversationActions} />
             )}
           </TouchableOpacity>
         ))}
@@ -1109,7 +1258,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dateText: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#888',
     marginTop: 4,
   },
@@ -1130,7 +1279,7 @@ const styles = StyleSheet.create({
   },
   balanceHeroLabel: {
     color: '#cdd9ef',
-    fontSize: 14,
+    fontSize: 16,
   },
   balanceHeroAmount: {
     color: '#fff',
@@ -1141,7 +1290,7 @@ const styles = StyleSheet.create({
   balanceHeroHint: {
     color: '#d7e3f8',
     marginTop: 8,
-    fontSize: 13,
+    fontSize: 16,
   },
   infoRow: {
     backgroundColor: '#fff',
@@ -1153,12 +1302,12 @@ const styles = StyleSheet.create({
     borderColor: '#eef2fa',
   },
   infoLabel: {
-    fontSize: 12,
+    fontSize: 16,
     color: '#7b8ba7',
     marginBottom: 4,
   },
   infoValue: {
-    fontSize: 15,
+    fontSize: 16,
     color: '#1a1a2e',
     fontWeight: '600',
   },
@@ -1176,17 +1325,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   savingsName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: '#1a1a2e',
   },
   savingsPercent: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#3a7bd5',
     fontWeight: '700',
   },
   savingsAmount: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#666',
     marginTop: 8,
     marginBottom: 10,
@@ -1238,7 +1387,7 @@ const styles = StyleSheet.create({
   },
   newConversationButtonText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
     marginLeft: 6,
   },
@@ -1255,20 +1404,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#eef5ff',
   },
   conversationPillBody: {
-    minHeight: 52,
+    minHeight: 48,
+    paddingRight: 42,
   },
   conversationPillTitle: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1a1a2e',
-    marginBottom: 4,
+    marginBottom: 5,
   },
   conversationPillTitleActive: {
     color: '#1a3a6e',
   },
   conversationPreview: {
-    fontSize: 12,
+    fontSize: 16,
     color: '#667085',
+    lineHeight: 21,
   },
   conversationPreviewActive: {
     color: '#3c5d8a',
@@ -1276,16 +1427,37 @@ const styles = StyleSheet.create({
   conversationActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginTop: 8,
-    gap: 6,
+    alignItems: 'center',
+    marginTop: 0,
   },
   conversationIconBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#f7f9fc',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d5e2f5',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    marginLeft: 8,
+  },
+  conversationArchiveBtn: {
+    borderColor: '#f2c7cc',
+    backgroundColor: '#fff7f8',
+  },
+  conversationTrashInside: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    zIndex: 2,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
   },
   conversationTitleInput: {
     borderWidth: 1,
@@ -1294,7 +1466,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 10,
     paddingVertical: 8,
-    fontSize: 13,
+    fontSize: 16,
     color: '#1a1a2e',
     marginBottom: 4,
   },
@@ -1323,7 +1495,7 @@ const styles = StyleSheet.create({
     color: '#bbb',
     textAlign: 'center',
     marginTop: 60,
-    fontSize: 15,
+    fontSize: 16,
   },
   bubble: {
     maxWidth: '82%',
@@ -1344,15 +1516,15 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   bubbleText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#1a1a2e',
-    lineHeight: 20,
+    lineHeight: 23,
   },
   bubbleTextUser: {
     color: '#fff',
   },
   bubbleTime: {
-    fontSize: 11,
+    fontSize: 16,
     color: '#6f7d95',
     marginTop: 6,
   },
@@ -1375,7 +1547,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    fontSize: 15,
+    fontSize: 16,
     color: '#1a1a2e',
     maxHeight: 100,
     borderWidth: 1,
@@ -1405,7 +1577,7 @@ const styles = StyleSheet.create({
   },
   speakerButtonText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
     marginLeft: 6,
   },
@@ -1424,7 +1596,7 @@ const styles = StyleSheet.create({
     color: '#d62839',
     paddingHorizontal: 16,
     paddingBottom: 8,
-    fontSize: 13,
+    fontSize: 16,
   },
   contactsTitle: {
     paddingHorizontal: 20,
@@ -1447,9 +1619,9 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   contactSearchHint: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#667085',
-    lineHeight: 18,
+    lineHeight: 22,
     marginBottom: 12,
   },
   contactSearchInput: {
@@ -1459,7 +1631,7 @@ const styles = StyleSheet.create({
     borderColor: '#dde4f0',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 14,
+    fontSize: 16,
     color: '#1a1a2e',
     marginBottom: 12,
   },
@@ -1472,13 +1644,13 @@ const styles = StyleSheet.create({
   },
   contactSearchButtonText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
   },
   contactEmptyState: {
     color: '#b42318',
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 16,
+    lineHeight: 22,
     marginTop: 12,
   },
   contactFallbackForm: {
@@ -1488,7 +1660,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#e9eef7',
   },
   contactFallbackTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: '#1a1a2e',
     marginBottom: 10,
@@ -1504,7 +1676,7 @@ const styles = StyleSheet.create({
   },
   secondarySearchButtonText: {
     color: '#1a3a6e',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
   },
   searchResultsSection: {
@@ -1531,7 +1703,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#dbeafe',
   },
   avatarText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: '#1d4f91',
   },
@@ -1539,12 +1711,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contactName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: '#1a1a2e',
   },
   contactDesc: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#888',
     marginTop: 2,
   },
@@ -1558,12 +1730,12 @@ const styles = StyleSheet.create({
   },
   addContactButtonText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
   },
   alreadyContactText: {
     color: '#2f855a',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
   },
 });
