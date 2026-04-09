@@ -10,6 +10,7 @@ import {
   archiveConversation,
   createConversation,
   createConversationMessage,
+  getWallet,
   listContacts,
   listConversationMessages,
   listConversations,
@@ -97,6 +98,35 @@ function formatAssistantMessage(message) {
   }
 
   return message;
+}
+
+function sanitizePhoneInput(value) {
+  const cleaned = String(value || '').replace(/[^\d+]/g, '');
+  const startsWithPlus = cleaned.startsWith('+');
+  const digitsOnly = cleaned.replace(/\+/g, '');
+  return `${startsWithPlus ? '+' : ''}${digitsOnly}`;
+}
+
+function renderMessageWithBold(text, baseStyle, boldStyle) {
+  const content = String(text || '');
+  const parts = content.split(/(\*[^*]+\*)/g);
+
+  return (
+    <Text style={baseStyle}>
+      {parts.map((part, index) => {
+        const boldMatch = part.match(/^\*([^*]+)\*$/);
+        if (boldMatch) {
+          return (
+            <Text key={`bold-${index}`} style={boldStyle}>
+              {boldMatch[1]}
+            </Text>
+          );
+        }
+
+        return <Text key={`text-${index}`}>{part}</Text>;
+      })}
+    </Text>
+  );
 }
 
 function SecurityBanner({ compact = false }) {
@@ -266,6 +296,38 @@ function speakAssistantMessage(text) {
   });
 }
 
+function resolveDisplayBalance(session, walletResult) {
+  const walletBalance = Number(walletResult?.availableBalance);
+  if (Number.isFinite(walletBalance)) {
+    return walletBalance;
+  }
+
+  const sessionBalance = Number(session?.user?.balanceAvailable);
+  if (Number.isFinite(sessionBalance)) {
+    return sessionBalance;
+  }
+
+  return 0;
+}
+
+function getBalanceFromChatState(state) {
+  const mainAccount = state?.accounts?.find(
+    (account) => account?.nickname === 'libreton-basico',
+  );
+  const accountBalance = Number(mainAccount?.balance);
+
+  if (Number.isFinite(accountBalance)) {
+    return accountBalance;
+  }
+
+  const directBalance = Number(state?.balance);
+  if (Number.isFinite(directBalance)) {
+    return directBalance;
+  }
+
+  return 0;
+}
+
 export default function HomeScreen({ navigation, session, onLogout }) {
   const [activeTab, setActiveTab] = useState('wallet');
   const [messages, setMessages] = useState([]);
@@ -293,7 +355,7 @@ export default function HomeScreen({ navigation, session, onLogout }) {
   const [conversationDraftTitle, setConversationDraftTitle] = useState('');
   const [isArchivingConversation, setIsArchivingConversation] = useState('');
   const [walletState, setWalletState] = useState({
-    balance: session?.user?.balanceAvailable ?? 0,
+    balance: 0,
     savings: [],
   });
   const recognitionRef = useRef(null);
@@ -311,9 +373,10 @@ export default function HomeScreen({ navigation, session, onLogout }) {
       setScreenError('');
 
       try {
-        const [conversationsResult] = await Promise.all([
+        const [conversationsResult, walletResult] = await Promise.all([
           listConversations(session.token),
           loadContacts(session.token),
+          getWallet(session.token),
         ]);
 
         if (!isMounted) {
@@ -325,6 +388,10 @@ export default function HomeScreen({ navigation, session, onLogout }) {
 
         setConversations(conversations);
         setConversationCount(conversations.length);
+        setWalletState((prev) => ({
+          ...prev,
+          balance: resolveDisplayBalance(session, walletResult),
+        }));
         if (nextConversationId) {
           const messagesResult = await listConversationMessages(
             session.token,
@@ -420,7 +487,7 @@ export default function HomeScreen({ navigation, session, onLogout }) {
     }
 
     setWalletState({
-      balance: state.balance ?? 0,
+      balance: getBalanceFromChatState(state),
       savings: state.savings ?? [],
     });
   };
@@ -1124,9 +1191,11 @@ function ChatTab({
             key={msg.messageId}
             style={[styles.bubble, msg.role === 'user' ? styles.bubbleUser : styles.bubbleBot]}
           >
-            <Text style={[styles.bubbleText, msg.role === 'user' && styles.bubbleTextUser]}>
-              {msg.role === 'assistant' ? formatAssistantMessage(msg.content) : msg.content}
-            </Text>
+            {renderMessageWithBold(
+              msg.role === 'assistant' ? formatAssistantMessage(msg.content) : msg.content,
+              [styles.bubbleText, msg.role === 'user' && styles.bubbleTextUser],
+              styles.boldText,
+            )}
             {msg.role === 'assistant' && getMissingContactName(msg.content) ? (
               <TouchableOpacity style={styles.contactShortcutButton} onPress={onOpenContacts}>
                 <Ionicons name="person-add-outline" size={20} color="#fff" />
@@ -1252,7 +1321,7 @@ function ContactsTab({
               placeholder="Teléfono del contacto"
               placeholderTextColor="#98a2b3"
               value={contactPhone}
-              onChangeText={setContactPhone}
+              onChangeText={(value) => setContactPhone(sanitizePhoneInput(value))}
               keyboardType="phone-pad"
             />
             <TouchableOpacity style={styles.secondarySearchButton} onPress={onSearchByContactDetails}>
@@ -1738,6 +1807,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1a1a2e',
     lineHeight: 23,
+  },
+  boldText: {
+    fontWeight: '700',
   },
   bubbleTextUser: {
     color: '#fff',

@@ -109,6 +109,13 @@ export function listContacts(token) {
   });
 }
 
+export function getWallet(token) {
+  return request('/me/wallet', {
+    method: 'GET',
+    token,
+  });
+}
+
 export function searchUsers(token, query) {
   return request('/users/search', {
     method: 'GET',

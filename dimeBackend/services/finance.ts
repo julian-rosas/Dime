@@ -21,6 +21,8 @@ export interface Contact {
   name: string;
   alias: string[];
   phone?: string;
+  contactUserId?: string;
+  primaryAccountId?: string;
 }
 
 export interface SavingsGoal {
@@ -45,6 +47,7 @@ export interface PendingOperation {
   type: "transfer" | "savings_deposit" | "savings_create";
   amount?: number;
   recipient?: string;
+  recipientName?: string;
   savingsGoalId?: string;
   savingsGoalName?: string;
   description: string;
@@ -59,10 +62,10 @@ export interface FinancialResult {
 
 /* ===================== INITIAL STATE ===================== */
 
-export async function createInitialState(customerId: string) : Promise<UserState> {
+export async function createInitialState(userId: string) : Promise<UserState> {
   try {
     const result = await ddb.send(
-      new GetCommand({ TableName: USERS_TABLE, Key: { customerId } })
+      new GetCommand({ TableName: USERS_TABLE, Key: { userId } })
     );
 
     if (result.Item) {
@@ -72,14 +75,14 @@ export async function createInitialState(customerId: string) : Promise<UserState
 
       return mapAccountToUserState(
         userAccounts,
-        customerId,
+        userId,
         result.Item.nessieId
       );
     }
 
     return mapAccountToUserState(
       [],
-      customerId,
+      userId,
       ""
     );
     
@@ -87,7 +90,7 @@ export async function createInitialState(customerId: string) : Promise<UserState
     console.error("Error leyendo sesión de DynamoDB:", err);
     return mapAccountToUserState(
       [],
-      customerId,
+      userId,
       ""
     )
   }
@@ -162,15 +165,16 @@ export async function executeTransfer(
     await refreshAccounts(state);
 
     const updatedMain = getMainAccount(state);
+    const newBalance = mainAccount.balance - amount;
 
     return {
       success: true,
       message: `✅ Transferiste $${amount.toFixed(
         2
-      )} MXN a ${recipientName}. Tu nuevo saldo es $${updatedMain.balance.toFixed(
+      )} MXN a ${recipientName}. Tu nuevo saldo es $${newBalance.toFixed(
         2
       )} MXN.`,
-      newBalance: updatedMain.balance,
+      newBalance: newBalance,
     };
   } catch (error: any) {
     return {

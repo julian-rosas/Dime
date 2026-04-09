@@ -138,6 +138,30 @@ function cleanOptionalNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+function parseDeterministicTransfer(message: string): ParsedIntent | undefined {
+  const normalized = message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const transferMatch = normalized.match(
+    /(?:quiero\s+)?(?:env(?:ia|iar|iarle)?|manda(?:r|rle|le)?|transfiere(?:r|rle)?|deposita(?:r|rle)?|depositarle|depositarie|transferirle|mandarle|darle|enviarle|pasale?|hacerle llegar)\s+\$?([\d,]+(?:\.\d{1,2})?)\s*(?:pesos?|mxn|dolares?|usd)?\s*(?:a|para|al|a nombre de)\s+(.+)/
+  );
+
+  if (!transferMatch) {
+    return undefined;
+  }
+
+  return {
+    type: "transfer",
+    amount: parseFloat(transferMatch[1].replace(/,/g, "")),
+    recipient: transferMatch[2].trim(),
+    confidence: "high",
+  };
+}
+
 function rescueDeterministicIntent(
   intent: ParsedIntent,
   message: string,
@@ -147,7 +171,11 @@ function rescueDeterministicIntent(
     return intent;
   }
 
-  const rescued = validateParsedIntent(fallbackParse(message), message, state);
+  const rescued = validateParsedIntent(
+    parseDeterministicTransfer(message) ?? fallbackParse(message),
+    message,
+    state
+  );
   if (rescued.type !== "unknown" && rescued.type !== "help") {
     return rescued;
   }
@@ -274,6 +302,11 @@ function validateParsedIntent(intent: ParsedIntent, message: string, state: User
 
 // Construye el system prompt con el contexto del usuario y patrones del dataset sintético.
 function buildSystemPrompt(state: UserState): string {
+  const mainAccount = state.accounts?.find(
+    (account: any) => account.nickname === "libreton-basico"
+  );
+  const currentBalance = Number(mainAccount?.balance ?? 0);
+
   const contactList =
     state.contacts.length > 0
       ? state.contacts.map((c) => `- ${c.name} (alias: ${c.alias.join(", ")})`).join("\n")
@@ -292,7 +325,7 @@ Debes responder SOLO con un JSON válido que siga exactamente el esquema solicit
 No uses markdown. No expliques nada. No agregues texto antes ni después del JSON.
 
 CONTEXTO DEL USUARIO:
-- Saldo actual: $${state.balance.toFixed(2)} MXN
+- Saldo actual: $${currentBalance.toFixed(2)} MXN
 - Contactos registrados:
 ${contactList}
 - Cajitas de ahorro:
@@ -387,6 +420,11 @@ export async function parseIntent(
     return securityDecision.intent;
   }
 
+  const deterministicTransfer = parseDeterministicTransfer(message);
+  if (deterministicTransfer) {
+    return validateParsedIntent(deterministicTransfer, message, state);
+  }
+
   const client = await getClient();
 
   try {
@@ -435,7 +473,7 @@ function fallbackParse(message: string): ParsedIntent {
   }
 
   const transferMatch = lower.match(
-    /(?:quiero\s+)?(?:env[ií](?:a|ar|arle)?|manda(?:r|rle|le)?|transfiere(?:r|rle)?|deposita(?:r|rle)?|depositarle|transferirle|mandarle|enviarle|p[áa]sale?|hacerle llegar)\s+\$?([\d,]+(?:\.\d{1,2})?)\s*(?:pesos?|mxn|d[oó]lares?|usd)?\s*(?:a|para|al|a nombre de)\s+(.+)/
+    /(?:quiero\s+)?(?:env[ií](?:a|ar|arle)?|manda(?:r|rle|le)?|transferi(?:r|rle)?|deposita(?:r|rle)?|transferencia|deposito|mandarle|enviarle|p[áa]sale?|hacerle llegar)\s+\$?([\d,]+(?:\.\d{1,2})?)\s*(?:pesos?|mxn|d[oó]lares?|usd)?\s*(?:a|para|al|a nombre de)\s+(.+)/
   );
   if (transferMatch) {
     return {

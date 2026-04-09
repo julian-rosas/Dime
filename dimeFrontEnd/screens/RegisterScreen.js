@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { Fragment, useState } from 'react';
 import {
   Text,
   TextInput,
@@ -13,6 +13,13 @@ import {
 } from 'react-native';
 import { signup } from '../services/api';
 
+function sanitizePhoneInput(value) {
+  const cleaned = String(value || '').replace(/[^\d+]/g, '');
+  const startsWithPlus = cleaned.startsWith('+');
+  const digitsOnly = cleaned.replace(/\+/g, '');
+  return `${startsWithPlus ? '+' : ''}${digitsOnly}`;
+}
+
 export default function RegisterScreen({ navigation, onAuthenticated }) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -22,6 +29,8 @@ export default function RegisterScreen({ navigation, onAuthenticated }) {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const RootWrapper = Platform.OS === 'web' ? Fragment : TouchableWithoutFeedback;
+  const rootWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss };
 
   const handleSignup = async () => {
     const trimmedFirstName = firstName.trim();
@@ -68,7 +77,7 @@ export default function RegisterScreen({ navigation, onAuthenticated }) {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <RootWrapper {...rootWrapperProps}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -134,7 +143,7 @@ export default function RegisterScreen({ navigation, onAuthenticated }) {
             placeholderTextColor="#aaa"
             keyboardType="phone-pad"
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={(value) => setPhone(sanitizePhoneInput(value))}
           />
 
           <Text style={styles.label}>Contrasena</Text>
@@ -162,7 +171,7 @@ export default function RegisterScreen({ navigation, onAuthenticated }) {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
-    </TouchableWithoutFeedback>
+    </RootWrapper>
   );
 }
 
