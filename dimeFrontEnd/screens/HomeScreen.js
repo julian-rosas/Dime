@@ -4,13 +4,17 @@ import {
   TextInput, SafeAreaView, Platform, StatusBar, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
+import * as Speech from 'expo-speech';
 import {
+  createContact,
+  archiveConversation,
   createConversation,
   createConversationMessage,
   listContacts,
   listConversationMessages,
   listConversations,
+  searchUsers,
+  updateConversation,
 } from '../services/api';
 
 function getGreeting() {
@@ -44,6 +48,28 @@ function formatMessageTime(value) {
   });
 }
 
+function getSpeechRecognition() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function speakAssistantMessage(text) {
+  const trimmed = text?.trim();
+  if (!trimmed) {
+    return;
+  }
+
+  Speech.stop();
+  Speech.speak(trimmed, {
+    language: 'es-MX',
+    rate: 0.95,
+    pitch: 1,
+  });
+}
+
 export default function HomeScreen({ navigation, session, onLogout }) {
   const [activeTab, setActiveTab] = useState('wallet');
   const [messages, setMessages] = useState([]);
@@ -53,19 +79,32 @@ export default function HomeScreen({ navigation, session, onLogout }) {
   const [isSending, setIsSending] = useState(false);
   const [screenError, setScreenError] = useState('');
   const [contacts, setContacts] = useState([]);
+  const [contactSearchText, setContactSearchText] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearchingContacts, setIsSearchingContacts] = useState(false);
+  const [isAddingContact, setIsAddingContact] = useState('');
+  const [contactsError, setContactsError] = useState('');
+  const [showContactFallbackForm, setShowContactFallbackForm] = useState(false);
+  const [contactEmptyState, setContactEmptyState] = useState('');
   const [conversationId, setConversationId] = useState(null);
+  const [conversations, setConversations] = useState([]);
   const [conversationCount, setConversationCount] = useState(0);
+  const [lastAssistantReply, setLastAssistantReply] = useState('');
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+  const [editingConversationId, setEditingConversationId] = useState('');
+  const [conversationDraftTitle, setConversationDraftTitle] = useState('');
+  const [isArchivingConversation, setIsArchivingConversation] = useState('');
   const [walletState, setWalletState] = useState({
     balance: session?.user?.balanceAvailable ?? 0,
     savings: [],
   });
+  const recognitionRef = useRef(null);
+  const spokenMessageIdsRef = useRef(new Set());
 
   useEffect(() => {
     if (!session?.token) {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Splash' }],
-      });
       return;
     }
 
@@ -76,9 +115,9 @@ export default function HomeScreen({ navigation, session, onLogout }) {
       setScreenError('');
 
       try {
-        const [conversationsResult, contactsResult] = await Promise.all([
+        const [conversationsResult] = await Promise.all([
           listConversations(session.token),
-          listContacts(session.token),
+          loadContacts(session.token),
         ]);
 
         if (!isMounted) {
@@ -88,9 +127,8 @@ export default function HomeScreen({ navigation, session, onLogout }) {
         const conversations = conversationsResult.conversations || [];
         const nextConversationId = conversations[0]?.conversationId || null;
 
+        setConversations(conversations);
         setConversationCount(conversations.length);
-        setContacts(contactsResult.contacts || []);
-
         if (nextConversationId) {
           const messagesResult = await listConversationMessages(
             session.token,
@@ -125,6 +163,38 @@ export default function HomeScreen({ navigation, session, onLogout }) {
     };
   }, [navigation, session]);
 
+  useEffect(() => {
+    const latestAssistantMessage = [...messages]
+      .reverse()
+      .find((message) => message.role === 'assistant');
+
+    if (!latestAssistantMessage?.messageId) {
+      return;
+    }
+
+    if (spokenMessageIdsRef.current.has(latestAssistantMessage.messageId)) {
+      return;
+    }
+
+    spokenMessageIdsRef.current.add(latestAssistantMessage.messageId);
+    setLastAssistantReply(latestAssistantMessage.content);
+    speakAssistantMessage(latestAssistantMessage.content);
+  }, [messages]);
+
+  const loadContacts = async (token = session?.token) => {
+    const contactsResult = await listContacts(token);
+    setContacts(contactsResult.contacts || []);
+    return contactsResult;
+  };
+
+  const loadConversations = async (token = session?.token) => {
+    const conversationsResult = await listConversations(token);
+    const nextConversations = conversationsResult.conversations || [];
+    setConversations(nextConversations);
+    setConversationCount(nextConversations.length);
+    return nextConversations;
+  };
+
   const handleStateFromReply = (state) => {
     if (!state) {
       return;
@@ -141,14 +211,104 @@ export default function HomeScreen({ navigation, session, onLogout }) {
       return conversationId;
     }
 
+    setIsCreatingConversation(true);
+
     const conversation = await createConversation(session.token, {
       title: 'Nuevo chat',
       agentMode: 'default',
     });
 
+    const updatedConversations = await loadConversations();
     setConversationId(conversation.conversationId);
-    setConversationCount((prev) => prev + 1);
+    setMessages([]);
+    setConversationCount(updatedConversations.length);
+    setIsCreatingConversation(false);
     return conversation.conversationId;
+  };
+
+  const handleSelectConversation = async (nextConversationId) => {
+    setConversationId(nextConversationId);
+    setScreenError('');
+    setIsBootstrapping(true);
+
+    try {
+      const messagesResult = await listConversationMessages(session.token, nextConversationId);
+      setMessages(messagesResult.messages || []);
+    } catch (err) {
+      setScreenError(err.message || 'No se pudo abrir la conversacion.');
+    } finally {
+      setIsBootstrapping(false);
+    }
+  };
+
+  const handleCreateConversation = async () => {
+    setScreenError('');
+    setIsCreatingConversation(true);
+
+    try {
+      const conversation = await createConversation(session.token, {
+        title: 'Nuevo chat',
+        agentMode: 'default',
+      });
+      await loadConversations();
+      setConversationId(conversation.conversationId);
+      setMessages([]);
+      setActiveTab('chat');
+    } catch (err) {
+      setScreenError(err.message || 'No se pudo crear el chat.');
+    } finally {
+      setIsCreatingConversation(false);
+    }
+  };
+
+  const handleStartEditingConversation = (conversation) => {
+    setEditingConversationId(conversation.conversationId);
+    setConversationDraftTitle(conversation.title || 'Nuevo chat');
+  };
+
+  const handleSaveConversationTitle = async () => {
+    const trimmed = conversationDraftTitle.trim();
+    if (!editingConversationId || !trimmed) {
+      setEditingConversationId('');
+      return;
+    }
+
+    try {
+      await updateConversation(session.token, editingConversationId, {
+        title: trimmed,
+      });
+      await loadConversations();
+      setEditingConversationId('');
+      setConversationDraftTitle('');
+    } catch (err) {
+      setScreenError(err.message || 'No se pudo actualizar el nombre del chat.');
+    }
+  };
+
+  const handleArchiveConversation = async (targetConversationId) => {
+    setIsArchivingConversation(targetConversationId);
+    setScreenError('');
+
+    try {
+      await archiveConversation(session.token, targetConversationId);
+      const remainingConversations = await loadConversations();
+
+      if (conversationId === targetConversationId) {
+        const nextConversationId = remainingConversations[0]?.conversationId || null;
+        setConversationId(nextConversationId);
+
+        if (nextConversationId) {
+          const messagesResult = await listConversationMessages(session.token, nextConversationId);
+          setMessages(messagesResult.messages || []);
+        } else {
+          setMessages([]);
+        }
+      }
+    } catch (err) {
+      setScreenError(err.message || 'No se pudo archivar el chat.');
+    } finally {
+      setIsArchivingConversation('');
+    }
   };
 
   const sendMessage = async () => {
@@ -208,6 +368,142 @@ export default function HomeScreen({ navigation, session, onLogout }) {
     }
   };
 
+  const handleVoiceInput = async () => {
+    if (isRecording) {
+      recognitionRef.current?.stop?.();
+      setIsRecording(false);
+      return;
+    }
+
+    const SpeechRecognition = getSpeechRecognition();
+
+    if (!SpeechRecognition) {
+      setScreenError('Tu navegador no soporta transcripcion por voz.');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'es-MX';
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setScreenError('');
+        setIsRecording(true);
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map((result) => result[0]?.transcript || '')
+          .join(' ')
+          .trim();
+
+        setInputText(transcript);
+      };
+
+      recognition.onerror = () => {
+        setScreenError('No se pudo transcribir el audio. Intenta otra vez.');
+        setIsRecording(false);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      setScreenError('No se pudo activar el microfono.');
+      setIsRecording(false);
+    }
+  };
+
+  const handleSearchContacts = async () => {
+    const trimmed = contactSearchText.trim();
+    if (!trimmed) {
+      setContactsError('Escribe el nombre del contacto.');
+      setSearchResults([]);
+      return;
+    }
+
+    setContactsError('');
+    setContactEmptyState('');
+    setShowContactFallbackForm(false);
+    setIsSearchingContacts(true);
+
+    try {
+      const query = { displayName: trimmed };
+      const result = await searchUsers(session.token, query);
+      const users = result.users || [];
+      setSearchResults(users);
+
+      if (users.length === 0) {
+        setContactEmptyState(`No encontré a "${trimmed}" en Dime. Si quieres, prueba con su correo y teléfono.`);
+        setShowContactFallbackForm(true);
+      }
+    } catch (err) {
+      setContactsError(err.message || 'No se pudo buscar usuarios.');
+      setSearchResults([]);
+    } finally {
+      setIsSearchingContacts(false);
+    }
+  };
+
+  const handleAddContact = async (user) => {
+    setContactsError('');
+    setIsAddingContact(user.userId);
+
+    try {
+      await createContact(session.token, {
+        contactUserId: user.userId,
+        nickname: user.displayName,
+        aliasForMe: [],
+        isFavorite: false,
+      });
+
+      await loadContacts();
+      setSearchResults((prev) => prev.map((item) => (
+        item.userId === user.userId
+          ? { ...item, isAlreadyContact: true }
+          : item
+      )));
+    } catch (err) {
+      setContactsError(err.message || 'No se pudo agregar el contacto.');
+    } finally {
+      setIsAddingContact('');
+    }
+  };
+
+  const handleSearchByContactDetails = async () => {
+    if (!contactEmail.trim() && !contactPhone.trim()) {
+      setContactsError('Escribe un correo o un teléfono para seguir buscando.');
+      return;
+    }
+
+    setContactsError('');
+    setContactEmptyState('');
+    setIsSearchingContacts(true);
+
+    try {
+      const result = await searchUsers(session.token, {
+        email: contactEmail.trim() || undefined,
+        phone: contactPhone.trim() || undefined,
+      });
+      const users = result.users || [];
+      setSearchResults(users);
+
+      if (users.length === 0) {
+        setContactEmptyState('Ese contacto todavía no existe en Dime. Hoy el backend solo permite agregar usuarios que ya tengan cuenta.');
+      }
+    } catch (err) {
+      setContactsError(err.message || 'No se pudo buscar con correo y teléfono.');
+      setSearchResults([]);
+    } finally {
+      setIsSearchingContacts(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
@@ -223,13 +519,31 @@ export default function HomeScreen({ navigation, session, onLogout }) {
         )}
         {activeTab === 'chat' && (
           <ChatTab
+            conversations={conversations}
+            conversationId={conversationId}
             messages={messages}
             inputText={inputText}
             setInputText={setInputText}
             isRecording={isRecording}
             isSending={isSending}
+            isCreatingConversation={isCreatingConversation}
+            editingConversationId={editingConversationId}
+            conversationDraftTitle={conversationDraftTitle}
+            setConversationDraftTitle={setConversationDraftTitle}
+            isArchivingConversation={isArchivingConversation}
+            onCreateConversation={handleCreateConversation}
+            onSelectConversation={handleSelectConversation}
+            onStartEditingConversation={handleStartEditingConversation}
+            onSaveConversationTitle={handleSaveConversationTitle}
+            onCancelEditingConversation={() => {
+              setEditingConversationId('');
+              setConversationDraftTitle('');
+            }}
+            onArchiveConversation={handleArchiveConversation}
             onSend={sendMessage}
-            onMic={handleMic}
+            onMic={handleVoiceInput}
+            onReplaySpeech={() => speakAssistantMessage(lastAssistantReply)}
+            lastAssistantReply={lastAssistantReply}
             screenError={screenError}
             isBootstrapping={isBootstrapping}
           />
@@ -238,7 +552,21 @@ export default function HomeScreen({ navigation, session, onLogout }) {
           <ContactsTab
             contacts={contacts}
             isBootstrapping={isBootstrapping}
-            screenError={screenError}
+            screenError={contactsError || screenError}
+            contactSearchText={contactSearchText}
+            setContactSearchText={setContactSearchText}
+            onSearchContacts={handleSearchContacts}
+            searchResults={searchResults}
+            isSearchingContacts={isSearchingContacts}
+            onAddContact={handleAddContact}
+            isAddingContact={isAddingContact}
+            showContactFallbackForm={showContactFallbackForm}
+            contactEmptyState={contactEmptyState}
+            contactEmail={contactEmail}
+            setContactEmail={setContactEmail}
+            contactPhone={contactPhone}
+            setContactPhone={setContactPhone}
+            onSearchByContactDetails={handleSearchByContactDetails}
           />
         )}
       </View>
@@ -351,13 +679,28 @@ function InfoRow({ label, value }) {
 }
 
 function ChatTab({
+  conversations,
+  conversationId,
   messages,
   inputText,
   setInputText,
   isRecording,
   isSending,
+  isCreatingConversation,
+  editingConversationId,
+  conversationDraftTitle,
+  setConversationDraftTitle,
+  isArchivingConversation,
+  onCreateConversation,
+  onSelectConversation,
+  onStartEditingConversation,
+  onSaveConversationTitle,
+  onCancelEditingConversation,
+  onArchiveConversation,
   onSend,
   onMic,
+  onReplaySpeech,
+  lastAssistantReply,
   screenError,
   isBootstrapping,
 }) {
@@ -373,7 +716,123 @@ function ChatTab({
 
   return (
     <View style={styles.chatContainer}>
-      <Text style={styles.chatTitle}>Asistente DIME</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.conversationStrip}
+        contentContainerStyle={styles.conversationStripContent}
+      >
+        <TouchableOpacity
+          style={styles.newConversationButton}
+          onPress={onCreateConversation}
+          disabled={isCreatingConversation}
+        >
+          {isCreatingConversation ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <>
+              <Ionicons name="add" size={18} color="#fff" />
+              <Text style={styles.newConversationButtonText}>Nuevo chat</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {conversations.map((conversation) => (
+          <TouchableOpacity
+            key={conversation.conversationId}
+            style={[
+              styles.conversationPill,
+              conversation.conversationId === conversationId && styles.conversationPillActive,
+            ]}
+            onPress={() => onSelectConversation(conversation.conversationId)}
+          >
+            <View style={styles.conversationPillBody}>
+              {editingConversationId === conversation.conversationId ? (
+                <TextInput
+                  style={styles.conversationTitleInput}
+                  value={conversationDraftTitle}
+                  onChangeText={setConversationDraftTitle}
+                  onSubmitEditing={onSaveConversationTitle}
+                  autoFocus
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.conversationPillTitle,
+                    conversation.conversationId === conversationId && styles.conversationPillTitleActive,
+                  ]}
+                >
+                  {conversation.title || 'Nuevo chat'}
+                </Text>
+              )}
+              <Text
+                style={[
+                  styles.conversationPreview,
+                  conversation.conversationId === conversationId && styles.conversationPreviewActive,
+                ]}
+              >
+                {conversation.lastMessagePreview || 'Sin mensajes'}
+              </Text>
+            </View>
+            {editingConversationId === conversation.conversationId ? (
+              <View style={styles.conversationActions}>
+                <TouchableOpacity onPress={onSaveConversationTitle} style={styles.conversationIconBtn}>
+                  <Ionicons name="checkmark" size={16} color="#1a3a6e" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={onCancelEditingConversation} style={styles.conversationIconBtn}>
+                  <Ionicons name="close" size={16} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.conversationActions}>
+                <TouchableOpacity
+                  onPress={() => onStartEditingConversation(conversation)}
+                  style={styles.conversationIconBtn}
+                >
+                  <Ionicons name="pencil" size={14} color="#1a3a6e" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => onArchiveConversation(conversation.conversationId)}
+                  style={styles.conversationIconBtn}
+                  disabled={isArchivingConversation === conversation.conversationId}
+                >
+                  {isArchivingConversation === conversation.conversationId ? (
+                    <ActivityIndicator color="#1a3a6e" size="small" />
+                  ) : (
+                    <Ionicons name="archive-outline" size={14} color="#8b1e2d" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <View style={styles.chatHeader}>
+        <Text style={styles.chatTitle}>Asistente DIME</Text>
+        <TouchableOpacity
+          style={[
+            styles.speakerButton,
+            !lastAssistantReply && styles.speakerButtonDisabled,
+          ]}
+          onPress={onReplaySpeech}
+          disabled={!lastAssistantReply}
+        >
+          <Ionicons
+            name="volume-high"
+            size={18}
+            color={lastAssistantReply ? '#fff' : '#9aa7bf'}
+          />
+          <Text
+            style={[
+              styles.speakerButtonText,
+              !lastAssistantReply && styles.speakerButtonTextDisabled,
+            ]}
+          >
+            Repetir
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       <ScrollView
         ref={scrollRef}
@@ -436,12 +895,125 @@ function ChatTab({
   );
 }
 
-function ContactsTab({ contacts, isBootstrapping, screenError }) {
+function ContactsTab({
+  contacts,
+  isBootstrapping,
+  screenError,
+  contactSearchText,
+  setContactSearchText,
+  onSearchContacts,
+  searchResults,
+  isSearchingContacts,
+  onAddContact,
+  isAddingContact,
+  showContactFallbackForm,
+  contactEmptyState,
+  contactEmail,
+  setContactEmail,
+  contactPhone,
+  setContactPhone,
+  onSearchByContactDetails,
+}) {
   return (
     <ScrollView style={styles.tabContent}>
       <Text style={[styles.sectionTitle, styles.contactsTitle]}>
         Contactos
       </Text>
+
+      <View style={styles.contactSearchCard}>
+        <Text style={styles.contactSearchTitle}>Agregar contacto</Text>
+        <Text style={styles.contactSearchHint}>
+          Pon el nombre del contacto. Si no aparece, te pediremos su correo y teléfono para buscarlo mejor.
+        </Text>
+        <TextInput
+          style={styles.contactSearchInput}
+          placeholder="Pon el nombre del contacto"
+          placeholderTextColor="#98a2b3"
+          value={contactSearchText}
+          onChangeText={setContactSearchText}
+          autoCapitalize="words"
+        />
+        <TouchableOpacity style={styles.contactSearchButton} onPress={onSearchContacts}>
+          {isSearchingContacts ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.contactSearchButtonText}>Buscar contacto</Text>
+          )}
+        </TouchableOpacity>
+
+        {contactEmptyState ? (
+          <Text style={styles.contactEmptyState}>{contactEmptyState}</Text>
+        ) : null}
+
+        {showContactFallbackForm ? (
+          <View style={styles.contactFallbackForm}>
+            <Text style={styles.contactFallbackTitle}>No apareció por nombre</Text>
+            <TextInput
+              style={styles.contactSearchInput}
+              placeholder="Correo del contacto"
+              placeholderTextColor="#98a2b3"
+              value={contactEmail}
+              onChangeText={setContactEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+            <TextInput
+              style={styles.contactSearchInput}
+              placeholder="Teléfono del contacto"
+              placeholderTextColor="#98a2b3"
+              value={contactPhone}
+              onChangeText={setContactPhone}
+              keyboardType="phone-pad"
+            />
+            <TouchableOpacity style={styles.secondarySearchButton} onPress={onSearchByContactDetails}>
+              {isSearchingContacts ? (
+                <ActivityIndicator color="#1a3a6e" />
+              ) : (
+                <Text style={styles.secondarySearchButtonText}>Buscar con correo y teléfono</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </View>
+
+      {searchResults.length > 0 ? (
+        <View style={styles.searchResultsSection}>
+          <Text style={styles.sectionTitle}>Resultados</Text>
+          {searchResults.map((user) => (
+            <View key={user.userId} style={styles.contactRow}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {(user.displayName || 'DI')
+                    .split(' ')
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((part) => part[0]?.toUpperCase())
+                    .join('') || 'DI'}
+                </Text>
+              </View>
+              <View style={styles.contactInfo}>
+                <Text style={styles.contactName}>{user.displayName || 'Usuario Dime'}</Text>
+                <Text style={styles.contactDesc}>{user.phone || user.email || 'Sin dato de contacto'}</Text>
+              </View>
+              {user.isAlreadyContact ? (
+                <Text style={styles.alreadyContactText}>Agregado</Text>
+              ) : (
+                <TouchableOpacity
+                  style={styles.addContactButton}
+                  onPress={() => onAddContact(user)}
+                  disabled={isAddingContact === user.userId}
+                >
+                  {isAddingContact === user.userId ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.addContactButtonText}>Agregar</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {isBootstrapping ? <ActivityIndicator style={{ marginTop: 24 }} color="#3a7bd5" /> : null}
       {!isBootstrapping && contacts.length === 0 ? (
@@ -644,15 +1216,103 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f0f6ff',
   },
-  chatTitle: {
-    fontSize: 20,
+  conversationStrip: {
+    maxHeight: 124,
+    backgroundColor: '#eef4ff',
+  },
+  conversationStripContent: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
+    gap: 10,
+  },
+  newConversationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a3a6e',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minWidth: 120,
+  },
+  newConversationButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  conversationPill: {
+    width: 210,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#d9e4f4',
+    padding: 12,
+  },
+  conversationPillActive: {
+    borderColor: '#3a7bd5',
+    backgroundColor: '#eef5ff',
+  },
+  conversationPillBody: {
+    minHeight: 52,
+  },
+  conversationPillTitle: {
+    fontSize: 14,
     fontWeight: '700',
     color: '#1a1a2e',
-    padding: 20,
+    marginBottom: 4,
+  },
+  conversationPillTitleActive: {
+    color: '#1a3a6e',
+  },
+  conversationPreview: {
+    fontSize: 12,
+    color: '#667085',
+  },
+  conversationPreviewActive: {
+    color: '#3c5d8a',
+  },
+  conversationActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+    gap: 6,
+  },
+  conversationIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#f7f9fc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  conversationTitleInput: {
+    borderWidth: 1,
+    borderColor: '#bdd0ec',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#1a1a2e',
+    marginBottom: 4,
+  },
+  chatHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eef2fa',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chatTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a1a2e',
   },
   chatMessages: {
     flex: 1,
@@ -731,6 +1391,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#dde4f0',
   },
+  speakerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a3a6e',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  speakerButtonDisabled: {
+    backgroundColor: '#eef2fa',
+  },
+  speakerButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  speakerButtonTextDisabled: {
+    color: '#9aa7bf',
+  },
   sendBtn: {
     width: 40,
     height: 40,
@@ -749,6 +1430,85 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     fontSize: 22,
+  },
+  contactSearchCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#eef2fa',
+  },
+  contactSearchTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1a2e',
+    marginBottom: 6,
+  },
+  contactSearchHint: {
+    fontSize: 13,
+    color: '#667085',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  contactSearchInput: {
+    backgroundColor: '#f7f9fc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#dde4f0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#1a1a2e',
+    marginBottom: 12,
+  },
+  contactSearchButton: {
+    backgroundColor: '#1a3a6e',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  contactSearchButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  contactEmptyState: {
+    color: '#b42318',
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 12,
+  },
+  contactFallbackForm: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#e9eef7',
+  },
+  contactFallbackTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a1a2e',
+    marginBottom: 10,
+  },
+  secondarySearchButton: {
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#1a3a6e',
+    backgroundColor: '#f8fbff',
+  },
+  secondarySearchButtonText: {
+    color: '#1a3a6e',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  searchResultsSection: {
+    marginBottom: 16,
   },
   contactRow: {
     flexDirection: 'row',
@@ -787,5 +1547,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#888',
     marginTop: 2,
+  },
+  addContactButton: {
+    backgroundColor: '#3a7bd5',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minWidth: 76,
+    alignItems: 'center',
+  },
+  addContactButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  alreadyContactText: {
+    color: '#2f855a',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

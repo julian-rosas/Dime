@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8082';
+const API_BASE_URL = 'https://tkh20sglm5.execute-api.us-east-1.amazonaws.com/prod';
 
 function buildUrl(path, queryParams) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -72,6 +72,21 @@ export function createConversation(token, body = {}) {
   });
 }
 
+export function updateConversation(token, conversationId, body) {
+  return request(`/me/conversations/${conversationId}`, {
+    method: 'PATCH',
+    token,
+    body,
+  });
+}
+
+export function archiveConversation(token, conversationId) {
+  return request(`/me/conversations/${conversationId}`, {
+    method: 'DELETE',
+    token,
+  });
+}
+
 export function listConversationMessages(token, conversationId) {
   return request(`/me/conversations/${conversationId}/messages`, {
     method: 'GET',
@@ -91,6 +106,22 @@ export function listContacts(token) {
   return request('/me/contacts', {
     method: 'GET',
     token,
+  });
+}
+
+export function searchUsers(token, query) {
+  return request('/users/search', {
+    method: 'GET',
+    token,
+    query,
+  });
+}
+
+export function createContact(token, body) {
+  return request('/me/contacts', {
+    method: 'POST',
+    token,
+    body,
   });
 }
 

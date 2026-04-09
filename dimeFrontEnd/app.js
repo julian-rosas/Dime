@@ -13,46 +13,46 @@ export default function App() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Splash">
-          {(props) => (
-            <SplashScreen
-              {...props}
-              session={session}
-            />
-          )}
-        </Stack.Screen>
-        <Stack.Screen name="Login">
-          {(props) => (
-            <LoginScreen
-              {...props}
-              onAuthenticated={setSession}
-            />
-          )}
-        </Stack.Screen>
-        <Stack.Screen name="Register">
-          {(props) => (
-            <RegisterScreen
-              {...props}
-              onAuthenticated={setSession}
-            />
-          )}
-        </Stack.Screen>
-        <Stack.Screen name="Home">
-          {(props) => (
-            <HomeScreen
-              {...props}
-              session={session}
-              onLogout={() => {
-                setSession(null);
-                props.navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Splash' }],
-                });
-              }}
-            />
-          )}
-        </Stack.Screen>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {session ? (
+          <Stack.Screen name="Home">
+            {(props) => (
+              <HomeScreen
+                {...props}
+                session={session}
+                onLogout={() => {
+                  setSession(null);
+                }}
+              />
+            )}
+          </Stack.Screen>
+        ) : (
+          <>
+            <Stack.Screen name="Splash">
+              {(props) => (
+                <SplashScreen
+                  {...props}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Login">
+              {(props) => (
+                <LoginScreen
+                  {...props}
+                  onAuthenticated={setSession}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Register">
+              {(props) => (
+                <RegisterScreen
+                  {...props}
+                  onAuthenticated={setSession}
+                />
+              )}
+            </Stack.Screen>
+          </>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );
