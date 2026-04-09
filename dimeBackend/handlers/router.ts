@@ -18,6 +18,7 @@ import { handleGetContact } from "./contacts/get-contact";
 import { handleListContacts } from "./contacts/list-contacts";
 import { handleUpdateContact } from "./contacts/update-contact";
 import { handleSearchUsers } from "./users/search-users";
+import { handleGetWallet } from "./wallet/get-wallet";
 
 type RouteHandler = (
   event: APIGatewayProxyEvent
@@ -44,6 +45,7 @@ const routes = new Map<string, RouteHandler>([
   ["PATCH /me/contacts/{contactUserId}", handleUpdateContact],
   ["DELETE /me/contacts/{contactUserId}", handleDeleteContact],
   ["GET /users/search", handleSearchUsers],
+  ["GET /me/wallet", handleGetWallet],
 ]);
 
 export async function routeRequest(
