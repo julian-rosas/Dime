@@ -1,7 +1,7 @@
 import axios from "axios";
 import { getApiKey } from "../nessiUtils";
 
-const BASE_URL = "http://api.reimaginebanking.com";
+const BASE_URL = "http://api.nessieisreal.com";
 
 export async function getAllAccountDeposits(id: string) {
   try {

@@ -3,7 +3,7 @@ import { getApiKey } from "../nessiUtils";
 import { Customer } from "../models/customer";
 import { Address } from "../models/address";
 
-const BASE_URL = "http://api.reimaginebanking.com";
+const BASE_URL = "http://api.nessieisreal.com";
 
 
 export async function getAllCustomers() {
