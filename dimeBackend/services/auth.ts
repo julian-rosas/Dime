@@ -81,23 +81,6 @@ export interface LoginInput {
   password: string;
 }
 
-function splitDisplayName(displayName?: string): { firstName: string; lastName: string } {
-  const normalized = displayName?.trim() ?? "";
-  if (!normalized) {
-    return { firstName: "Usuario", lastName: "Dime" };
-  }
-
-  const parts = normalized.split(/\s+/).filter(Boolean);
-  if (parts.length === 1) {
-    return { firstName: parts[0], lastName: "Dime" };
-  }
-
-  return {
-    firstName: parts[0],
-    lastName: parts.slice(1).join(" "),
-  };
-}
-
 function requireEnv(value: string, name: string): string {
   if (!value) {
     throw new Error(`Falta la variable de entorno ${name}.`);
@@ -335,14 +318,6 @@ function mapCognitoError(error: unknown): never {
     case "ExpiredCodeException":
       throw new Error("No se pudo confirmar el usuario.");
     default:
-      if (
-        error &&
-        typeof error === "object" &&
-        "message" in error &&
-        typeof (error as { message?: unknown }).message === "string"
-      ) {
-        throw new Error((error as { message: string }).message);
-      }
       if (error instanceof Error) {
         throw new Error(error.message);
       }
@@ -398,11 +373,10 @@ async function finalizeAuthResponseLogin(
 export async function signup(input: SignupInput) {
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phone);
+  const firstName = input.firstName;
+  const lastName = input.lastName;
   const password = validatePassword(input.password);
   const displayName = input.displayName?.trim() || "Usuario Dime";
-  const fallbackNames = splitDisplayName(displayName);
-  const firstName = input.firstName?.trim() || fallbackNames.firstName;
-  const lastName = input.lastName?.trim() || fallbackNames.lastName;
   const username = getUsername(email, phone);
 
   try {
