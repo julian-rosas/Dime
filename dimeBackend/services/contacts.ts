@@ -8,6 +8,7 @@ import {
   ScanCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type { Contact } from "./finance";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
@@ -264,6 +265,31 @@ export async function createContact(userId: string, input: CreateContactInput) {
 
   await saveContact(contact);
   return mapContact(contact, user);
+}
+
+export async function listContactsForChat(userId: string): Promise<Contact[]> {
+  const contacts = await listContacts(userId);
+
+  return contacts.map((contact) => {
+    const displayName = contact.nickname ?? contact.contactUser.displayName ?? "Contacto";
+    const alias = Array.from(
+      new Set(
+        [
+          displayName,
+          contact.contactUser.displayName,
+          ...(contact.aliasForMe ?? []),
+        ]
+          .filter(Boolean)
+          .map((value) => String(value).trim().toLowerCase())
+      )
+    );
+
+    return {
+      name: displayName,
+      alias,
+      phone: contact.contactUser.phone ?? undefined,
+    };
+  });
 }
 
 export async function getContact(userId: string, contactUserId: string) {

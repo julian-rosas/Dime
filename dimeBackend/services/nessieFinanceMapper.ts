@@ -1,10 +1,10 @@
 import { UserState } from "./finance";
 
-export function mapAccountToUserState(account: any): UserState {
+export function mapAccountToUserState(accounts: any, costumerId: string, nessieId: string): UserState {
     return {
-      userId: account.customer_id, 
-      accountId: account,
-      balance: account.balance,
+      userId: costumerId, 
+      nessieId: nessieId,
+      accounts,
       contacts: [
         // replace for any logic to get from ddb
         { name: "Juan García", alias: ["juan", "juancho"] },

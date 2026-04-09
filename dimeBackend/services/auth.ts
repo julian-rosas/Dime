@@ -24,6 +24,7 @@ const APP_CLIENT_ID = process.env.COGNITO_APP_CLIENT_ID ?? "";
 interface UserRecord {
   userId: string;
   nessieId?: string;
+  primaryAccountId?: string;
   cognitoUsername: string;
   email?: string;
   phone?: string;
@@ -185,17 +186,19 @@ async function buildUserRecordFromClaimsSignup(
   const nessieCustomerId = nessieCustomer.objectCreated._id;
 
   const initialAccount: Account = {
-    type: "credit-card",
+    type:  "Credit Card",
     nickname: "libreton-basico",
     rewards: 0,
     balance: 0
-  }
+  };
 
-  createAccount(nessieCustomerId, initialAccount);
+  const nessieAccount = await createAccount(nessieCustomerId, initialAccount);
+  const primaryAccountId = nessieAccount?.objectCreated?._id;
   
   return {
     userId,
     nessieId: nessieCustomerId,
+    primaryAccountId,
     cognitoUsername,
     email: normalizeEmail(claims.email),
     phone: normalizePhone(claims.phone_number),

@@ -77,6 +77,28 @@ function extractAmount(value) {
   });
 }
 
+function getMissingContactName(message) {
+  if (!message) {
+    return '';
+  }
+
+  const quotedMatch = message.match(/No tengo a "([^"]+)"/i);
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1].trim();
+  }
+
+  return '';
+}
+
+function formatAssistantMessage(message) {
+  const missingContactName = getMissingContactName(message);
+  if (missingContactName) {
+    return `No tengo a "${missingContactName}" en tus contactos. Regístralo en la pestaña de Contactos para poder transferirle.`;
+  }
+
+  return message;
+}
+
 function SecurityBanner({ compact = false }) {
   return (
     <View style={[styles.securityBanner, compact && styles.securityBannerCompact]}>
@@ -753,6 +775,7 @@ export default function HomeScreen({ navigation, session, onLogout }) {
               lastAssistantReply={lastAssistantReply}
               screenError={screenError}
               isBootstrapping={isBootstrapping}
+              onOpenContacts={() => setActiveTab('contacts')}
             />
           )}
           {activeTab === 'contacts' && (
@@ -935,6 +958,7 @@ function ChatTab({
   lastAssistantReply,
   screenError,
   isBootstrapping,
+  onOpenContacts,
 }) {
   const scrollRef = useRef(null);
   const isWeb = Platform.OS === 'web';
@@ -1101,8 +1125,14 @@ function ChatTab({
             style={[styles.bubble, msg.role === 'user' ? styles.bubbleUser : styles.bubbleBot]}
           >
             <Text style={[styles.bubbleText, msg.role === 'user' && styles.bubbleTextUser]}>
-              {msg.content}
+              {msg.role === 'assistant' ? formatAssistantMessage(msg.content) : msg.content}
             </Text>
+            {msg.role === 'assistant' && getMissingContactName(msg.content) ? (
+              <TouchableOpacity style={styles.contactShortcutButton} onPress={onOpenContacts}>
+                <Ionicons name="person-add-outline" size={20} color="#fff" />
+                <Text style={styles.contactShortcutButtonText}>Ir a Contactos</Text>
+              </TouchableOpacity>
+            ) : null}
             <Text style={[styles.bubbleTime, msg.role === 'user' && styles.bubbleTimeUser]}>
               {formatMessageTime(msg.createdAt)}
             </Text>
@@ -1719,6 +1749,22 @@ const styles = StyleSheet.create({
   },
   bubbleTimeUser: {
     color: '#dce8ff',
+  },
+  contactShortcutButton: {
+    marginTop: 14,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a3a6e',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  contactShortcutButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 8,
   },
   inputBar: {
     flexDirection: 'row',

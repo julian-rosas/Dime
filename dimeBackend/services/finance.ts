@@ -1,14 +1,25 @@
-// services/finance.ts
-// Motor financiero mock — guarda el estado en DynamoDB por sesión.
-// En producción, esto se conectaría a una fintech/banco real.
-
-import { createAccount, getAccountById } from "../nessi/service/accountService";
+import {
+  createAccount,
+  getAccountByCustomerId,
+} from "../nessi/service/accountService";
 import { createAccountTransfer } from "../nessi/service/transferService";
 import { mapAccountToUserState } from "./nessieFinanceMapper";
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+} from "@aws-sdk/lib-dynamodb";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+
+const USERS_TABLE = process.env.USERS_TABLE ?? "";
+
+const client = new DynamoDBClient({});
+const ddb = DynamoDBDocumentClient.from(client);
+
+/* ===================== MODELS ===================== */
 
 export interface Contact {
   name: string;
-  alias: string[]; // nombres que el usuario puede usar para referirse a este contacto
+  alias: string[];
   phone?: string;
 }
 
@@ -18,12 +29,13 @@ export interface SavingsGoal {
   target: number;
   current: number;
   createdAt: string;
+  accountId?: string;
 }
 
 export interface UserState {
   userId: string;
-  accountId: string; 
-  balance: number;
+  nessieId: string;
+  accounts: any[];
   contacts: Contact[];
   savings: SavingsGoal[];
   pendingOperation?: PendingOperation | null;
@@ -35,7 +47,7 @@ export interface PendingOperation {
   recipient?: string;
   savingsGoalId?: string;
   savingsGoalName?: string;
-  description: string; // descripción humana para mostrar en confirmación
+  description: string;
 }
 
 export interface FinancialResult {
@@ -45,70 +57,136 @@ export interface FinancialResult {
   updatedGoal?: SavingsGoal;
 }
 
-// Estado inicial para un usuario nuevo (mock)
-export function createInitialState(accountId: string): UserState {
-  return mapAccountToUserState(accountId);
+/* ===================== INITIAL STATE ===================== */
+
+export async function createInitialState(customerId: string) : Promise<UserState> {
+  try {
+    const result = await ddb.send(
+      new GetCommand({ TableName: USERS_TABLE, Key: { customerId } })
+    );
+
+    if (result.Item) {
+      const userAccounts = await getAccountByCustomerId(
+        result.Item.nessieId
+      );
+
+      return mapAccountToUserState(
+        userAccounts,
+        customerId,
+        result.Item.nessieId
+      );
+    }
+
+    return mapAccountToUserState(
+      [],
+      customerId,
+      ""
+    );
+    
+  } catch (err) {
+    console.error("Error leyendo sesión de DynamoDB:", err);
+    return mapAccountToUserState(
+      [],
+      customerId,
+      ""
+    )
+  }
 }
 
-// Resuelve un nombre a un contacto conocido
-export function resolveContact(name: string, contacts: Contact[]): Contact | null {
+/* ===================== HELPERS ===================== */
+
+function getMainAccount(state: UserState) {
+  const account = state.accounts.find(
+    (acc: any) => acc.nickname === "libreton-basico"
+  );
+
+  if (!account) {
+    throw new Error("No se encontró la cuenta libreton-basico");
+  }
+
+  return account;
+}
+
+async function refreshAccounts(state: UserState) {
+  const accounts = await getAccountByCustomerId(state.nessieId);
+  state.accounts = accounts;
+}
+
+/* ===================== CONTACTS ===================== */
+
+export function resolveContact(
+  name: string,
+  contacts: Contact[]
+): Contact | null {
   const normalized = name.toLowerCase().trim();
+
   return (
     contacts.find(
       (c) =>
         c.name.toLowerCase().includes(normalized) ||
-        c.alias.some((a) => a === normalized)
+        c.alias.includes(normalized)
     ) ?? null
   );
 }
 
-// Ejecuta una transferencia
+/* ===================== TRANSFERS ===================== */
+
 export async function executeTransfer(
   state: UserState,
   amount: number,
+  recipientAccountId: string,
   recipientName: string
 ): Promise<FinancialResult> {
   if (amount <= 0) {
     return { success: false, message: "El monto debe ser mayor a cero." };
   }
-  if (amount > state.balance) {
-    return {
-      success: false,
-      message: `No tienes saldo suficiente. Tu saldo es $${state.balance.toFixed(2)} MXN.`,
-    };
-  }
 
   try {
-    // 2. Call API
+    const mainAccount = getMainAccount(state);
+
+    if (amount > mainAccount.balance) {
+      return {
+        success: false,
+        message: `No tienes saldo suficiente. Tu saldo es $${mainAccount.balance.toFixed(
+          2
+        )} MXN.`,
+      };
+    }
+
     await createAccountTransfer(
-      state.userId,   // ⚠️ make sure this is accountId, not customerId
-      recipientName,
+      mainAccount._id,
+      recipientAccountId,
       amount
     );
 
-    // 3. Update local state ONLY if API succeeds
-    state.balance -= amount;
+    await refreshAccounts(state);
+
+    const updatedMain = getMainAccount(state);
 
     return {
       success: true,
-      message: `✅ Transferiste $${amount.toFixed(2)} MXN a ${recipientName}. Tu nuevo saldo es $${state.balance.toFixed(2)} MXN.`,
-      newBalance: state.balance,
+      message: `✅ Transferiste $${amount.toFixed(
+        2
+      )} MXN a ${recipientName}. Tu nuevo saldo es $${updatedMain.balance.toFixed(
+        2
+      )} MXN.`,
+      newBalance: updatedMain.balance,
     };
-
   } catch (error: any) {
     return {
       success: false,
-      message: `❌ Ocurrio un error al transferir`,
+      message: "❌ Ocurrió un error al transferir",
     };
   }
 }
+
+/* ===================== SAVINGS ===================== */
 
 export async function createSavingsGoal(
   state: UserState,
   name: string,
   target: number
 ): Promise<FinancialResult> {
-
   if (target <= 0) {
     return {
       success: false,
@@ -117,57 +195,59 @@ export async function createSavingsGoal(
   }
 
   try {
-    // 1. Create account in API
-    const newAccountPayload = {
-      type: "Credit Card", // ⚠️ you may want "Savings"
+    const response = await createAccount(state.nessieId, {
+      type: "Savings",
       nickname: name,
       rewards: 0,
-      balance: 0
-    };
+      balance: 0,
+    });
 
-    const accountResponse = await createAccount(
-      state.userId, // ⚠️ must be customer_id
-      newAccountPayload
-    );
+    const accountId = response.objectCreated?._id;
 
     const goal: SavingsGoal = {
-      id:accountResponse.objectCreated?._id ,
+      id: `goal_${Date.now()}`,
       name,
       target,
       current: 0,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      accountId,
     };
 
     state.savings.push(goal);
 
+    await refreshAccounts(state);
+
     return {
       success: true,
-      message: `🎯 Creé tu cajita "${name}" con meta de $${target.toFixed(2)} MXN.`,
+      message: `🎯 Creé tu cajita "${name}" con meta de $${target.toFixed(
+        2
+      )} MXN.`,
       updatedGoal: goal,
     };
-
   } catch (error: any) {
     return {
       success: false,
-      message: `❌ Error al crear la cajita: ${error?.message || error}`,
+      message: "❌ Error al crear la cajita",
     };
   }
 }
 
-
-// Deposita a una cajita de ahorro
 export async function depositToSavings(
   state: UserState,
   goalId: string,
   amount: number
 ): Promise<FinancialResult> {
-  
-  var goal: any;
+  const goal = state.savings.find((g) => g.id === goalId);
 
-  try {
-    goal = await getAccountById(goalId);
-  } catch (err: any){
-    return { success: false, message: "No encontré esa cajita de ahorro." };
+  if (!goal) {
+    return { success: false, message: "No encontré esa cajita." };
+  }
+
+  if (!goal.accountId) {
+    return {
+      success: false,
+      message: "La cajita no tiene cuenta asociada.",
+    };
   }
 
   if (amount <= 0) {
@@ -177,22 +257,27 @@ export async function depositToSavings(
     };
   }
 
-  if (amount > state.balance) {
-    return {
-      success: false,
-      message: `No tienes saldo suficiente. Tu saldo es $${state.balance.toFixed(2)} MXN.`,
-    };
-  }
-
   try {
+    const mainAccount = getMainAccount(state);
+
+    if (amount > mainAccount.balance) {
+      return {
+        success: false,
+        message: `No tienes saldo suficiente. Tu saldo es $${mainAccount.balance.toFixed(
+          2
+        )} MXN.`,
+      };
+    }
+
     await createAccountTransfer(
-      state.accountId,    
-      goal.accountId,     
+      mainAccount._id,
+      goal.accountId,
       amount,
       `Ahorro: ${goal.name}`
     );
 
-    state.balance -= amount;
+    await refreshAccounts(state);
+
     goal.current += amount;
 
     const percent = Math.min(
@@ -200,38 +285,48 @@ export async function depositToSavings(
       Math.round((goal.current / goal.target) * 100)
     );
 
-    const progressBar = buildProgressBar(percent);
-
     return {
       success: true,
-      message: `💰 Guardaste $${amount.toFixed(2)} MXN en "${goal.name}".\n${progressBar} ${percent}% de tu meta.\nSaldo restante: $${state.balance.toFixed(2)} MXN.`,
-      newBalance: state.balance,
+      message: `💰 Guardaste $${amount.toFixed(
+        2
+      )} MXN en "${goal.name}" (${percent}%).`,
+      newBalance: getMainAccount(state).balance,
       updatedGoal: goal,
     };
-
   } catch (error: any) {
     return {
       success: false,
-      message: `❌ Error al depositar: ${error?.message || error}`,
+      message: "❌ Error al depositar",
     };
   }
 }
 
+/* ===================== UI ===================== */
 
 function buildProgressBar(percent: number): string {
   const filled = Math.round(percent / 10);
   return "█".repeat(filled) + "░".repeat(10 - filled);
 }
 
-// Formatea el estado completo para mostrárselo al usuario
 export function formatBalance(state: UserState): string {
-  let msg = `💳 Tu saldo: $${state.balance.toFixed(2)} MXN\n`;
+  const mainAccount = getMainAccount(state);
+
+  let msg = `💳 Tu saldo: $${mainAccount.balance.toFixed(2)} MXN\n`;
+
   if (state.savings.length > 0) {
     msg += "\n📦 Tus cajitas:\n";
+
     for (const g of state.savings) {
-      const percent = Math.min(100, Math.round((g.current / g.target) * 100));
-      msg += `• ${g.name}: $${g.current.toFixed(2)} / $${g.target.toFixed(2)} (${percent}%)\n`;
+      const percent = Math.min(
+        100,
+        Math.round((g.current / g.target) * 100)
+      );
+
+      msg += `• ${g.name}: $${g.current.toFixed(
+        2
+      )} / $${g.target.toFixed(2)} (${percent}%)\n`;
     }
   }
+
   return msg.trim();
 }
