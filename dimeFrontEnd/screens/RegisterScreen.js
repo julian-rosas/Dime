@@ -34,7 +34,10 @@ export default function RegisterScreen({ navigation, onAuthenticated }) {
         password,
       });
 
-      onAuthenticated(result);
+      onAuthenticated({
+        ...result,
+        entryPoint: 'signup',
+      });
     } catch (err) {
       setError(err.message || 'No se pudo completar el registro.');
     } finally {

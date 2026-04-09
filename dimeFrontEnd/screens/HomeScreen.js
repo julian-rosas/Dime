@@ -56,6 +56,23 @@ function formatMessageTime(value) {
   });
 }
 
+function SecurityBanner({ compact = false }) {
+  return (
+    <View style={[styles.securityBanner, compact && styles.securityBannerCompact]}>
+      <View style={styles.securityBannerHeader}>
+        <Ionicons name="shield-checkmark-outline" size={compact ? 18 : 20} color="#fff4cf" />
+        <Text style={[styles.securityBannerTitle, compact && styles.securityBannerTitleCompact]}>
+          Mantente alerta ante estafadores
+        </Text>
+      </View>
+      <Text style={[styles.securityBannerText, compact && styles.securityBannerTextCompact]}>
+        Nunca compartas codigos, NIP o contrasenas. Suelen usar urgencia, hacerse pasar por el banco
+        o por alguien cercano, y mandar ligas o QR falsos.
+      </Text>
+    </View>
+  );
+}
+
 function getConversationSummary(conversation) {
   const pending = conversation?.linkedPendingOperation;
   const preview = conversation?.lastMessagePreview?.trim();
@@ -326,13 +343,19 @@ export default function HomeScreen({ navigation, session, onLogout }) {
     }
 
     if (spokenMessageIdsRef.current.has(latestAssistantMessage.messageId)) {
+      setLastAssistantReply(latestAssistantMessage.content);
+      return;
+    }
+
+    setLastAssistantReply(latestAssistantMessage.content);
+
+    if (activeTab !== 'chat') {
       return;
     }
 
     spokenMessageIdsRef.current.add(latestAssistantMessage.messageId);
-    setLastAssistantReply(latestAssistantMessage.content);
     speakAssistantMessage(latestAssistantMessage.content);
-  }, [messages]);
+  }, [activeTab, messages]);
 
   const loadContacts = async (token = session?.token) => {
     const contactsResult = await listContacts(token);
@@ -662,8 +685,9 @@ export default function HomeScreen({ navigation, session, onLogout }) {
   return (
     <KeyboardAvoidingView
       style={styles.safe}
-      behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
+      behavior={Platform.OS === 'web' ? undefined : Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      enabled={Platform.OS !== 'web'}
     >
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
@@ -739,7 +763,7 @@ export default function HomeScreen({ navigation, session, onLogout }) {
             onPress={() => setActiveTab('wallet')}
           />
           <TabButton
-            icon="sparkles-outline"
+            icon="chatbubble-ellipses-outline"
             active={activeTab === 'chat'}
             onPress={() => setActiveTab('chat')}
             isCenter
@@ -774,12 +798,11 @@ function WalletTab({ user, walletState, conversationCount, onLogout, onReadBalan
     <ScrollView
       style={styles.tabContent}
       showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps={Platform.OS === 'web' ? 'always' : 'handled'}
+      keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
     >
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Ionicons name="chatbubble-outline" size={22} color="#555" />
           <TouchableOpacity onPress={onLogout}>
             <Ionicons name="log-out-outline" size={24} color="#555" />
           </TouchableOpacity>
@@ -787,6 +810,10 @@ function WalletTab({ user, walletState, conversationCount, onLogout, onReadBalan
         <Text style={styles.greeting}>{getGreeting()},</Text>
         <Text style={styles.username}>{user?.displayName || 'Usuario Dime'}</Text>
         <Text style={styles.dateText}>{getFormattedDate()}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <SecurityBanner compact />
       </View>
 
       <View style={styles.section}>
@@ -875,6 +902,7 @@ function ChatTab({
   isBootstrapping,
 }) {
   const scrollRef = useRef(null);
+  const isWeb = Platform.OS === 'web';
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -977,7 +1005,6 @@ function ChatTab({
       </ScrollView>
 
       <View style={styles.chatHeader}>
-        <Text style={styles.chatTitle}>Oigo</Text>
         <View style={styles.chatHeaderActions}>
           <TouchableOpacity
             style={[
@@ -989,7 +1016,7 @@ function ChatTab({
           >
             <Ionicons
               name="volume-high"
-              size={26}
+              size={32}
               color={lastAssistantReply ? '#fff' : '#9aa7bf'}
             />
             <Text
@@ -1011,7 +1038,7 @@ function ChatTab({
           >
             <Ionicons
               name={isRecording ? 'mic' : 'mic-outline'}
-              size={30}
+              size={42}
               color={isRecording ? '#fff' : '#1a3a6e'}
             />
           </TouchableOpacity>
@@ -1021,8 +1048,8 @@ function ChatTab({
       <ScrollView
         ref={scrollRef}
         style={styles.chatMessages}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps={Platform.OS === 'web' ? 'always' : 'handled'}
+        keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
         contentContainerStyle={{ paddingBottom: 16 }}
       >
         {isBootstrapping ? (
@@ -1063,8 +1090,19 @@ function ChatTab({
           placeholderTextColor="#aaa"
           value={inputText}
           onChangeText={setInputText}
-          multiline
-          onSubmitEditing={onSend}
+          multiline={!isWeb}
+          blurOnSubmit={false}
+          onSubmitEditing={!isWeb ? onSend : undefined}
+          onKeyPress={
+            isWeb
+              ? (event) => {
+                  if (event.nativeEvent.key === 'Enter') {
+                    event.preventDefault?.();
+                    onSend();
+                  }
+                }
+              : undefined
+          }
         />
         <TouchableOpacity onPress={onSend} style={styles.sendBtn} disabled={isSending}>
           {isSending ? (
@@ -1100,8 +1138,8 @@ function ContactsTab({
   return (
     <ScrollView
       style={styles.tabContent}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps={Platform.OS === 'web' ? 'always' : 'handled'}
+      keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
     >
       <Text style={[styles.sectionTitle, styles.contactsTitle]}>
         Contactos
@@ -1309,6 +1347,40 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a1a2e',
     marginBottom: 12,
+  },
+  securityBanner: {
+    backgroundColor: '#243349',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#334a69',
+  },
+  securityBannerCompact: {
+    backgroundColor: '#2a3a54',
+  },
+  securityBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  securityBannerTitle: {
+    color: '#fff7d6',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  securityBannerTitleCompact: {
+    fontSize: 16,
+  },
+  securityBannerText: {
+    color: '#edf2fa',
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  securityBannerTextCompact: {
+    fontSize: 16,
+    lineHeight: 22,
   },
   balanceHero: {
     backgroundColor: '#1a3a6e',
@@ -1520,19 +1592,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eef2fa',
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
   chatHeaderActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-  },
-  chatTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1a1a2e',
+    width: '100%',
+    gap: 12,
   },
   chatMessages: {
     flex: 1,
@@ -1602,21 +1669,22 @@ const styles = StyleSheet.create({
     borderColor: '#dde4f0',
   },
   speakerButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#1a3a6e',
-    borderRadius: 999,
+    borderRadius: 20,
     paddingHorizontal: 20,
-    paddingVertical: 14,
-    minHeight: 58,
+    paddingVertical: 18,
+    minHeight: 84,
   },
   speakerButtonDisabled: {
     backgroundColor: '#eef2fa',
   },
   speakerButtonText: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     marginLeft: 8,
   },
@@ -1624,9 +1692,9 @@ const styles = StyleSheet.create({
     color: '#9aa7bf',
   },
   headerMicButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    flex: 1,
+    minHeight: 84,
+    borderRadius: 20,
     backgroundColor: '#eef4ff',
     borderWidth: 1,
     borderColor: '#c9d8f2',

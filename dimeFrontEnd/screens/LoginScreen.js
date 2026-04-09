@@ -25,7 +25,10 @@ export default function LoginScreen({ navigation, onAuthenticated }) {
         password,
       });
 
-      onAuthenticated(result);
+      onAuthenticated({
+        ...result,
+        entryPoint: 'login',
+      });
     } catch (err) {
       setError(err.message || 'No se pudo iniciar sesión.');
     } finally {

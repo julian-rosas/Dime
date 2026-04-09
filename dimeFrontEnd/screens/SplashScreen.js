@@ -60,6 +60,13 @@ export default function SplashScreen({ navigation }) {
       </View>
 
       <Animated.View style={[styles.buttonsArea, { opacity: buttonsOpacity }]}>
+        <View style={styles.securityBanner}>
+          <Text style={styles.securityBannerText}>
+            Mantente alerta ante estafadores. Nunca compartas tus codigos, NIP o contrasenas,
+            ni hagas transferencias por llamadas, ligas o QR sospechosos.
+          </Text>
+        </View>
+
         <TouchableOpacity
           style={styles.button}
           onPress={() => navigation.navigate('Login')}
@@ -166,6 +173,20 @@ const styles = StyleSheet.create({
   buttonsArea: {
     width: '80%',
     gap: 16,
+  },
+  securityBanner: {
+    backgroundColor: 'rgba(22, 30, 46, 0.84)',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
+  securityBannerText: {
+    color: '#f5f7fb',
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'left',
   },
   button: {
     backgroundColor: '#3a7bd5',
