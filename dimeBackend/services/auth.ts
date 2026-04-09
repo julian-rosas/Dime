@@ -182,7 +182,8 @@ async function buildUserRecordFromClaimsSignup(
   } 
 
   const nessieCustomer = await createCustomer(customer);
-  
+  const nessieCustomerId = nessieCustomer.objectCreated._id;
+
   const initialAccount: Account = {
     type: "credit-card",
     nickname: "libreton-basico",
@@ -190,11 +191,11 @@ async function buildUserRecordFromClaimsSignup(
     balance: 0
   }
 
-  createAccount(nessieCustomer._id, initialAccount);
+  await createAccount(nessieCustomerId, initialAccount);
   
   return {
     userId,
-    nessieId: nessieCustomer._id,
+    nessieId: nessieCustomerId,
     cognitoUsername,
     email: normalizeEmail(claims.email),
     phone: normalizePhone(claims.phone_number),
