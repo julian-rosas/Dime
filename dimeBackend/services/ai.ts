@@ -473,7 +473,7 @@ function fallbackParse(message: string): ParsedIntent {
   }
 
   const transferMatch = lower.match(
-    /(?:quiero\s+)?(?:env[ií](?:a|ar|arle)?|manda(?:r|rle|le)?|transfiere(?:r|rle)?|deposita(?:r|rle)?|depositarle|transferirle|mandarle|enviarle|p[áa]sale?|hacerle llegar)\s+\$?([\d,]+(?:\.\d{1,2})?)\s*(?:pesos?|mxn|d[oó]lares?|usd)?\s*(?:a|para|al|a nombre de)\s+(.+)/
+    /(?:quiero\s+)?(?:env[ií](?:a|ar|arle)?|manda(?:r|rle|le)?|transferi(?:r|rle)?|deposita(?:r|rle)?|transferencia|deposito|mandarle|enviarle|p[áa]sale?|hacerle llegar)\s+\$?([\d,]+(?:\.\d{1,2})?)\s*(?:pesos?|mxn|d[oó]lares?|usd)?\s*(?:a|para|al|a nombre de)\s+(.+)/
   );
   if (transferMatch) {
     return {

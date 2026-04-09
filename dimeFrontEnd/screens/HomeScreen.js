@@ -10,6 +10,7 @@ import {
   archiveConversation,
   createConversation,
   createConversationMessage,
+  getWallet,
   listContacts,
   listConversationMessages,
   listConversations,
@@ -295,6 +296,38 @@ function speakAssistantMessage(text) {
   });
 }
 
+function resolveDisplayBalance(session, walletResult) {
+  const walletBalance = Number(walletResult?.availableBalance);
+  if (Number.isFinite(walletBalance)) {
+    return walletBalance;
+  }
+
+  const sessionBalance = Number(session?.user?.balanceAvailable);
+  if (Number.isFinite(sessionBalance)) {
+    return sessionBalance;
+  }
+
+  return 0;
+}
+
+function getBalanceFromChatState(state) {
+  const mainAccount = state?.accounts?.find(
+    (account) => account?.nickname === 'libreton-basico',
+  );
+  const accountBalance = Number(mainAccount?.balance);
+
+  if (Number.isFinite(accountBalance)) {
+    return accountBalance;
+  }
+
+  const directBalance = Number(state?.balance);
+  if (Number.isFinite(directBalance)) {
+    return directBalance;
+  }
+
+  return 0;
+}
+
 export default function HomeScreen({ navigation, session, onLogout }) {
   const [activeTab, setActiveTab] = useState('wallet');
   const [messages, setMessages] = useState([]);
@@ -322,7 +355,7 @@ export default function HomeScreen({ navigation, session, onLogout }) {
   const [conversationDraftTitle, setConversationDraftTitle] = useState('');
   const [isArchivingConversation, setIsArchivingConversation] = useState('');
   const [walletState, setWalletState] = useState({
-    balance: session?.user?.balanceAvailable ?? 0,
+    balance: 0,
     savings: [],
   });
   const recognitionRef = useRef(null);
@@ -340,9 +373,10 @@ export default function HomeScreen({ navigation, session, onLogout }) {
       setScreenError('');
 
       try {
-        const [conversationsResult] = await Promise.all([
+        const [conversationsResult, walletResult] = await Promise.all([
           listConversations(session.token),
           loadContacts(session.token),
+          getWallet(session.token),
         ]);
 
         if (!isMounted) {
@@ -354,6 +388,10 @@ export default function HomeScreen({ navigation, session, onLogout }) {
 
         setConversations(conversations);
         setConversationCount(conversations.length);
+        setWalletState((prev) => ({
+          ...prev,
+          balance: resolveDisplayBalance(session, walletResult),
+        }));
         if (nextConversationId) {
           const messagesResult = await listConversationMessages(
             session.token,
@@ -449,7 +487,7 @@ export default function HomeScreen({ navigation, session, onLogout }) {
     }
 
     setWalletState({
-      balance: state.balance ?? 0,
+      balance: getBalanceFromChatState(state),
       savings: state.savings ?? [],
     });
   };
