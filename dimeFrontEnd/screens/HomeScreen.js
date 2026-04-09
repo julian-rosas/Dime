@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, SafeAreaView, Platform, StatusBar, ActivityIndicator, Keyboard, TouchableWithoutFeedback,
+  TextInput, SafeAreaView, Platform, StatusBar, ActivityIndicator, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
@@ -34,6 +34,14 @@ function formatCurrency(value) {
   return Number(value || 0).toLocaleString('es-MX', {
     style: 'currency',
     currency: 'MXN',
+  });
+}
+
+function formatCurrencyForSpeech(value) {
+  return Number(value || 0).toLocaleString('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    maximumFractionDigits: 2,
   });
 }
 
@@ -523,11 +531,9 @@ export default function HomeScreen({ navigation, session, onLogout }) {
     const SpeechRecognition = getSpeechRecognition();
 
     if (!SpeechRecognition) {
-      setScreenError(
-        Platform.OS === 'web'
-          ? 'Este navegador no soporta transcripcion por voz.'
-          : 'El dictado por voz ahorita solo funciona en web con Chrome o Edge. En la app puedes seguir escribiendo y escuchar las respuestas.'
-      );
+      if (Platform.OS === 'web') {
+        setScreenError('Este navegador no soporta transcripcion por voz.');
+      }
       return;
     }
 
@@ -654,7 +660,11 @@ export default function HomeScreen({ navigation, session, onLogout }) {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <KeyboardAvoidingView
+      style={styles.safe}
+      behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+    >
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
 
@@ -665,6 +675,7 @@ export default function HomeScreen({ navigation, session, onLogout }) {
               walletState={walletState}
               conversationCount={conversationCount}
               onLogout={onLogout}
+              onReadBalance={() => speakAssistantMessage(`Saldo disponible ${formatCurrencyForSpeech(walletState.balance)}`)}
             />
           )}
           {activeTab === 'chat' && (
@@ -740,7 +751,7 @@ export default function HomeScreen({ navigation, session, onLogout }) {
           />
         </View>
       </SafeAreaView>
-    </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -756,11 +767,16 @@ function TabButton({ icon, active, onPress, isCenter }) {
   );
 }
 
-function WalletTab({ user, walletState, conversationCount, onLogout }) {
+function WalletTab({ user, walletState, conversationCount, onLogout, onReadBalance }) {
   const savings = walletState.savings || [];
 
   return (
-    <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.tabContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+    >
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Ionicons name="chatbubble-outline" size={22} color="#555" />
@@ -774,13 +790,16 @@ function WalletTab({ user, walletState, conversationCount, onLogout }) {
       </View>
 
       <View style={styles.section}>
-        <View style={styles.balanceHero}>
-          <Text style={styles.balanceHeroLabel}>Saldo disponible</Text>
+        <TouchableOpacity style={styles.balanceHero} onPress={onReadBalance} activeOpacity={0.9}>
+          <View style={styles.balanceHeroTopRow}>
+            <Text style={styles.balanceHeroLabel}>Saldo disponible</Text>
+            <Ionicons name="volume-high" size={24} color="#d7e3f8" />
+          </View>
           <Text style={styles.balanceHeroAmount}>{formatCurrency(walletState.balance)}</Text>
           <Text style={styles.balanceHeroHint}>
             {conversationCount} conversación{conversationCount === 1 ? '' : 'es'} activa{conversationCount === 1 ? '' : 's'}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
@@ -958,34 +977,52 @@ function ChatTab({
       </ScrollView>
 
       <View style={styles.chatHeader}>
-        <Text style={styles.chatTitle}>Asistente DIME</Text>
-        <TouchableOpacity
-          style={[
-            styles.speakerButton,
-            !lastAssistantReply && styles.speakerButtonDisabled,
-          ]}
-          onPress={onReplaySpeech}
-          disabled={!lastAssistantReply}
-        >
-          <Ionicons
-            name="volume-high"
-            size={18}
-            color={lastAssistantReply ? '#fff' : '#9aa7bf'}
-          />
-          <Text
+        <Text style={styles.chatTitle}>Oigo</Text>
+        <View style={styles.chatHeaderActions}>
+          <TouchableOpacity
             style={[
-              styles.speakerButtonText,
-              !lastAssistantReply && styles.speakerButtonTextDisabled,
+              styles.speakerButton,
+              !lastAssistantReply && styles.speakerButtonDisabled,
+            ]}
+            onPress={onReplaySpeech}
+            disabled={!lastAssistantReply}
+          >
+            <Ionicons
+              name="volume-high"
+              size={26}
+              color={lastAssistantReply ? '#fff' : '#9aa7bf'}
+            />
+            <Text
+              style={[
+                styles.speakerButtonText,
+                !lastAssistantReply && styles.speakerButtonTextDisabled,
+              ]}
+            >
+              Repetir
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={onMic}
+            style={[
+              styles.headerMicButton,
+              isRecording && styles.headerMicButtonActive,
             ]}
           >
-            Repetir
-          </Text>
-        </TouchableOpacity>
+            <Ionicons
+              name={isRecording ? 'mic' : 'mic-outline'}
+              size={30}
+              color={isRecording ? '#fff' : '#1a3a6e'}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
         ref={scrollRef}
         style={styles.chatMessages}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingBottom: 16 }}
       >
         {isBootstrapping ? (
@@ -1029,9 +1066,6 @@ function ChatTab({
           multiline
           onSubmitEditing={onSend}
         />
-        <TouchableOpacity onPress={onMic} style={styles.micBtn}>
-          <Ionicons name={isRecording ? 'mic' : 'mic-outline'} size={22} color={isRecording ? '#e04040' : '#666'} />
-        </TouchableOpacity>
         <TouchableOpacity onPress={onSend} style={styles.sendBtn} disabled={isSending}>
           {isSending ? (
             <ActivityIndicator color="#fff" size="small" />
@@ -1064,7 +1098,11 @@ function ContactsTab({
   onSearchByContactDetails,
 }) {
   return (
-    <ScrollView style={styles.tabContent}>
+    <ScrollView
+      style={styles.tabContent}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+    >
       <Text style={[styles.sectionTitle, styles.contactsTitle]}>
         Contactos
       </Text>
@@ -1247,12 +1285,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   greeting: {
-    fontSize: 22,
+    fontSize: 28,
     color: '#1a1a2e',
     fontWeight: '700',
   },
   username: {
-    fontSize: 22,
+    fontSize: 28,
     color: '#1a1a2e',
     fontWeight: '700',
     marginBottom: 4,
@@ -1276,6 +1314,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a3a6e',
     borderRadius: 18,
     padding: 20,
+  },
+  balanceHeroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   balanceHeroLabel: {
     color: '#cdd9ef',
@@ -1473,7 +1516,7 @@ const styles = StyleSheet.create({
   chatHeader: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 12,
+    paddingBottom: 18,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eef2fa',
@@ -1481,8 +1524,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  chatHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
   chatTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: '#1a1a2e',
   },
@@ -1553,36 +1601,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#dde4f0',
   },
-  micBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f4f7fc',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#dde4f0',
-  },
   speakerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#1a3a6e',
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    minHeight: 58,
   },
   speakerButtonDisabled: {
     backgroundColor: '#eef2fa',
   },
   speakerButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '700',
-    marginLeft: 6,
+    marginLeft: 8,
   },
   speakerButtonTextDisabled: {
     color: '#9aa7bf',
+  },
+  headerMicButton: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#eef4ff',
+    borderWidth: 1,
+    borderColor: '#c9d8f2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerMicButtonActive: {
+    backgroundColor: '#d62839',
+    borderColor: '#d62839',
   },
   sendBtn: {
     width: 40,

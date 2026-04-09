@@ -104,8 +104,16 @@ async function handleIntent(
     }
 
     case "savings_create": {
-      if (!intent.savingsGoalName || !intent.savingsTarget) {
+      if (!intent.savingsGoalName && !intent.savingsTarget) {
         return "Para crear una cajita necesito el nombre y la meta. Ejemplo: *quiero ahorrar para vacaciones, meta 3000*";
+      }
+
+      if (intent.savingsGoalName && !intent.savingsTarget) {
+        return `Ya entendi que quieres ahorrar para *${intent.savingsGoalName}*. Ahora dime cual es tu meta. Ejemplo: *meta 3000*`;
+      }
+
+      if (!intent.savingsGoalName && intent.savingsTarget) {
+        return `Ya entendi la meta de *$${intent.savingsTarget.toFixed(2)} MXN*. Ahora dime como quieres llamar tu cajita.`;
       }
 
       state.pendingOperation = {
