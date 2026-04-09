@@ -56,6 +56,27 @@ function formatMessageTime(value) {
   });
 }
 
+function extractAmount(value) {
+  if (!value) {
+    return '';
+  }
+
+  const match = value.match(/\$?\s*([\d,]+(?:\.\d{1,2})?)/);
+  if (!match?.[1]) {
+    return '';
+  }
+
+  const amount = Number(match[1].replace(/,/g, ''));
+  if (!Number.isFinite(amount)) {
+    return '';
+  }
+
+  return amount.toLocaleString('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+  });
+}
+
 function SecurityBanner({ compact = false }) {
   return (
     <View style={[styles.securityBanner, compact && styles.securityBannerCompact]}>
@@ -700,6 +721,7 @@ export default function HomeScreen({ navigation, session, onLogout }) {
               conversationCount={conversationCount}
               onLogout={onLogout}
               onReadBalance={() => speakAssistantMessage(`Saldo disponible ${formatCurrencyForSpeech(walletState.balance)}`)}
+              onOpenChat={() => setActiveTab('chat')}
             />
           )}
           {activeTab === 'chat' && (
@@ -791,7 +813,7 @@ function TabButton({ icon, active, onPress, isCenter }) {
   );
 }
 
-function WalletTab({ user, walletState, conversationCount, onLogout, onReadBalance }) {
+function WalletTab({ user, walletState, conversationCount, onLogout, onReadBalance, onOpenChat }) {
   const savings = walletState.savings || [];
 
   return (
@@ -826,6 +848,19 @@ function WalletTab({ user, walletState, conversationCount, onLogout, onReadBalan
           <Text style={styles.balanceHeroHint}>
             {conversationCount} conversación{conversationCount === 1 ? '' : 'es'} activa{conversationCount === 1 ? '' : 's'}
           </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.chatEntryCard} onPress={onOpenChat} activeOpacity={0.92}>
+          <View style={styles.chatEntryIconWrap}>
+            <Ionicons name="chatbubble-ellipses-outline" size={28} color="#1a3a6e" />
+          </View>
+          <View style={styles.chatEntryContent}>
+            <Text style={styles.chatEntryTitle}>¿En qué te puedo ayudar?</Text>
+            <Text style={styles.chatEntryHint}>Toca aquí para abrir el chat y pedir ayuda con saldo, transferencias o ahorro.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#1a3a6e" />
         </TouchableOpacity>
       </View>
 
@@ -1406,6 +1441,45 @@ const styles = StyleSheet.create({
     color: '#d7e3f8',
     marginTop: 8,
     fontSize: 16,
+  },
+  chatEntryCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#dce6f5',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  chatEntryIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: '#eef4ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  chatEntryContent: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  chatEntryTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a2e',
+    marginBottom: 4,
+  },
+  chatEntryHint: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#5f6f86',
   },
   infoRow: {
     backgroundColor: '#fff',
