@@ -99,6 +99,28 @@ function formatAssistantMessage(message) {
   return message;
 }
 
+function renderMessageWithBold(text, baseStyle, boldStyle) {
+  const content = String(text || '');
+  const parts = content.split(/(\*[^*]+\*)/g);
+
+  return (
+    <Text style={baseStyle}>
+      {parts.map((part, index) => {
+        const boldMatch = part.match(/^\*([^*]+)\*$/);
+        if (boldMatch) {
+          return (
+            <Text key={`bold-${index}`} style={boldStyle}>
+              {boldMatch[1]}
+            </Text>
+          );
+        }
+
+        return <Text key={`text-${index}`}>{part}</Text>;
+      })}
+    </Text>
+  );
+}
+
 function SecurityBanner({ compact = false }) {
   return (
     <View style={[styles.securityBanner, compact && styles.securityBannerCompact]}>
@@ -1124,9 +1146,11 @@ function ChatTab({
             key={msg.messageId}
             style={[styles.bubble, msg.role === 'user' ? styles.bubbleUser : styles.bubbleBot]}
           >
-            <Text style={[styles.bubbleText, msg.role === 'user' && styles.bubbleTextUser]}>
-              {msg.role === 'assistant' ? formatAssistantMessage(msg.content) : msg.content}
-            </Text>
+            {renderMessageWithBold(
+              msg.role === 'assistant' ? formatAssistantMessage(msg.content) : msg.content,
+              [styles.bubbleText, msg.role === 'user' && styles.bubbleTextUser],
+              styles.boldText,
+            )}
             {msg.role === 'assistant' && getMissingContactName(msg.content) ? (
               <TouchableOpacity style={styles.contactShortcutButton} onPress={onOpenContacts}>
                 <Ionicons name="person-add-outline" size={20} color="#fff" />
@@ -1738,6 +1762,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1a1a2e',
     lineHeight: 23,
+  },
+  boldText: {
+    fontWeight: '700',
   },
   bubbleTextUser: {
     color: '#fff',
