@@ -64,7 +64,7 @@ async function handlePendingConfirmation(
     state.pendingOperation = null;
 
     if (op.type === "transfer" && op.amount && op.recipient) {
-      const result = await executeTransfer(state, op.amount, op.recipient);
+      const result = await executeTransfer(state, op.amount, state.nessieId, op.recipient);
       return result.message;
     }
 
