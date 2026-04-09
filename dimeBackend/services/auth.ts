@@ -56,18 +56,6 @@ interface CognitoClaims {
   token_use?: string;
 }
 
-function extractNessieId(payload: any): string | undefined {
-  if (typeof payload?._id === "string" && payload._id.length > 0) {
-    return payload._id;
-  }
-
-  if (typeof payload?.objectCreated?._id === "string" && payload.objectCreated._id.length > 0) {
-    return payload.objectCreated._id;
-  }
-
-  return undefined;
-}
-
 export interface SignupInput {
   email?: string;
   phone?: string;
@@ -194,11 +182,6 @@ async function buildUserRecordFromClaimsSignup(
   } 
 
   const nessieCustomer = await createCustomer(customer);
-  const nessieCustomerId = extractNessieId(nessieCustomer);
-
-  if (!nessieCustomerId) {
-    throw new Error(`No se pudo obtener el customerId de Nessie. Respuesta: ${JSON.stringify(nessieCustomer)}`);
-  }
   
   const initialAccount: Account = {
     type: "credit-card",
@@ -207,11 +190,11 @@ async function buildUserRecordFromClaimsSignup(
     balance: 0
   }
 
-  await createAccount(nessieCustomerId, initialAccount);
+  createAccount(nessieCustomer._id, initialAccount);
   
   return {
     userId,
-    nessieId: nessieCustomerId,
+    nessieId: nessieCustomer._id,
     cognitoUsername,
     email: normalizeEmail(claims.email),
     phone: normalizePhone(claims.phone_number),
