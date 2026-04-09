@@ -205,7 +205,7 @@ async function buildUserRecordFromClaimsSignup(
     phoneVerified: false,
     displayName: claims.name?.trim() || fallbackDisplayName || "Usuario Dime",
     preferredLanguage: "es-MX",
-    balanceAvailable: 1500,
+    balanceAvailable: 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -231,7 +231,7 @@ async function buildUserRecordFromClaimsLogin(
     phoneVerified: false,
     displayName: claims.name?.trim() || fallbackDisplayName || "Usuario Dime",
     preferredLanguage: "es-MX",
-    balanceAvailable: 1500,
+    balanceAvailable: 0,
     createdAt: now,
     updatedAt: now,
   };
