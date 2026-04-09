@@ -7,11 +7,7 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
-  marshallOptions: {
-    removeUndefinedValues: true,
-  },
-});
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 const CONVERSATIONS_TABLE = process.env.CONVERSATIONS_TABLE ?? "";
 

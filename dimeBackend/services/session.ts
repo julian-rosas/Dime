@@ -7,11 +7,7 @@ import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dyn
 import { UserState, createInitialState } from "./finance";
 
 const client = new DynamoDBClient({});
-const ddb = DynamoDBDocumentClient.from(client, {
-  marshallOptions: {
-    removeUndefinedValues: true,
-  },
-});
+const ddb = DynamoDBDocumentClient.from(client);
 
 // Cache en memoria para desarrollo local / si DynamoDB no está disponible
 const memoryStore = new Map<string, UserState>();

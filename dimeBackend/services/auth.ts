@@ -20,11 +20,7 @@ import {
 } from "./users";
 
 const cognito = new CognitoIdentityProviderClient({});
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
-  marshallOptions: {
-    removeUndefinedValues: true,
-  },
-});
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 const USERS_TABLE = process.env.USERS_TABLE ?? "";
 const AUTH_SESSIONS_TABLE = process.env.AUTH_SESSIONS_TABLE ?? "";

@@ -2,11 +2,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { createAccount, getAllAccounts } from "../nessi/service/accountService";
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
-  marshallOptions: {
-    removeUndefinedValues: true,
-  },
-});
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const USERS_TABLE = process.env.USERS_TABLE ?? "";
 
 export interface StoredUserRecord {
