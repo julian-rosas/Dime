@@ -99,6 +99,35 @@ function formatAssistantMessage(message) {
   return message;
 }
 
+function sanitizePhoneInput(value) {
+  const cleaned = String(value || '').replace(/[^\d+]/g, '');
+  const startsWithPlus = cleaned.startsWith('+');
+  const digitsOnly = cleaned.replace(/\+/g, '');
+  return `${startsWithPlus ? '+' : ''}${digitsOnly}`;
+}
+
+function renderMessageWithBold(text, baseStyle, boldStyle) {
+  const content = String(text || '');
+  const parts = content.split(/(\*[^*]+\*)/g);
+
+  return (
+    <Text style={baseStyle}>
+      {parts.map((part, index) => {
+        const boldMatch = part.match(/^\*([^*]+)\*$/);
+        if (boldMatch) {
+          return (
+            <Text key={`bold-${index}`} style={boldStyle}>
+              {boldMatch[1]}
+            </Text>
+          );
+        }
+
+        return <Text key={`text-${index}`}>{part}</Text>;
+      })}
+    </Text>
+  );
+}
+
 function SecurityBanner({ compact = false }) {
   return (
     <View style={[styles.securityBanner, compact && styles.securityBannerCompact]}>
@@ -1124,9 +1153,11 @@ function ChatTab({
             key={msg.messageId}
             style={[styles.bubble, msg.role === 'user' ? styles.bubbleUser : styles.bubbleBot]}
           >
-            <Text style={[styles.bubbleText, msg.role === 'user' && styles.bubbleTextUser]}>
-              {msg.role === 'assistant' ? formatAssistantMessage(msg.content) : msg.content}
-            </Text>
+            {renderMessageWithBold(
+              msg.role === 'assistant' ? formatAssistantMessage(msg.content) : msg.content,
+              [styles.bubbleText, msg.role === 'user' && styles.bubbleTextUser],
+              styles.boldText,
+            )}
             {msg.role === 'assistant' && getMissingContactName(msg.content) ? (
               <TouchableOpacity style={styles.contactShortcutButton} onPress={onOpenContacts}>
                 <Ionicons name="person-add-outline" size={20} color="#fff" />
@@ -1252,7 +1283,7 @@ function ContactsTab({
               placeholder="Teléfono del contacto"
               placeholderTextColor="#98a2b3"
               value={contactPhone}
-              onChangeText={setContactPhone}
+              onChangeText={(value) => setContactPhone(sanitizePhoneInput(value))}
               keyboardType="phone-pad"
             />
             <TouchableOpacity style={styles.secondarySearchButton} onPress={onSearchByContactDetails}>
@@ -1738,6 +1769,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1a1a2e',
     lineHeight: 23,
+  },
+  boldText: {
+    fontWeight: '700',
   },
   bubbleTextUser: {
     color: '#fff',

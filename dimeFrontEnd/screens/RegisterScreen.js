@@ -1,25 +1,54 @@
-import React, { useState } from 'react';
+import React, { Fragment, useState } from 'react';
 import {
-  Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, TouchableWithoutFeedback, Keyboard,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { signup } from '../services/api';
 
+function sanitizePhoneInput(value) {
+  const cleaned = String(value || '').replace(/[^\d+]/g, '');
+  const startsWithPlus = cleaned.startsWith('+');
+  const digitsOnly = cleaned.replace(/\+/g, '');
+  return `${startsWithPlus ? '+' : ''}${digitsOnly}`;
+}
+
 export default function RegisterScreen({ navigation, onAuthenticated }) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const RootWrapper = Platform.OS === 'web' ? Fragment : TouchableWithoutFeedback;
+  const rootWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss };
 
   const handleSignup = async () => {
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
+    const trimmedDisplayName = displayName.trim() || `${trimmedFirstName} ${trimmedLastName}`.trim();
+
+    if (!trimmedFirstName || !trimmedLastName) {
+      setError('Escribe tu nombre y tu apellido.');
+      return;
+    }
+
     if (!password.trim() || password.trim().length < 8) {
-      setError('Escribe una contraseña de al menos 8 caracteres.');
+      setError('Escribe una contrasena de al menos 8 caracteres.');
       return;
     }
 
     if (!email.trim() && !phone.trim()) {
-      setError('Necesitas capturar un correo o un teléfono.');
+      setError('Necesitas capturar un correo o un telefono.');
       return;
     }
 
@@ -28,7 +57,9 @@ export default function RegisterScreen({ navigation, onAuthenticated }) {
 
     try {
       const result = await signup({
-        displayName: displayName.trim() || 'Usuario Dime',
+        firstName: trimmedFirstName,
+        lastName: trimmedLastName,
+        displayName: trimmedDisplayName,
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         password,
@@ -46,72 +77,101 @@ export default function RegisterScreen({ navigation, onAuthenticated }) {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <RootWrapper {...rootWrapperProps}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>← Volver</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.title}>Registrar</Text>
-
-        <Text style={styles.label}>Nombre</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Tu nombre"
-          placeholderTextColor="#aaa"
-          value={displayName}
-          onChangeText={setDisplayName}
-        />
-
-        <Text style={styles.label}>Correo</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="julian@example.com"
-          placeholderTextColor="#aaa"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
-        />
-
-        <Text style={styles.label}>Número de Teléfono</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="+525512345678"
-          placeholderTextColor="#aaa"
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={setPhone}
-        />
-
-        <Text style={styles.label}>Contraseña</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="••••••••"
-          placeholderTextColor="#aaa"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <TouchableOpacity
-          style={[styles.button, isSubmitting && styles.buttonDisabled]}
-          onPress={handleSignup}
-          disabled={isSubmitting}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator
+          keyboardShouldPersistTaps="handled"
         >
-          {isSubmitting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Registrar</Text>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
+            <Text style={styles.backText}>{'<'} Volver</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.title}>Registrar</Text>
+          <Text style={styles.helperText}>
+            Tu nombre y apellido se usan para crear tu perfil en Dime y en Nessie.
+          </Text>
+
+          <Text style={styles.label}>Nombre</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Julian"
+            placeholderTextColor="#aaa"
+            value={firstName}
+            onChangeText={setFirstName}
+            autoCapitalize="words"
+          />
+
+          <Text style={styles.label}>Apellido</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Lopez"
+            placeholderTextColor="#aaa"
+            value={lastName}
+            onChangeText={setLastName}
+            autoCapitalize="words"
+          />
+
+          <Text style={styles.label}>Nombre para mostrar</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Julian Lopez"
+            placeholderTextColor="#aaa"
+            value={displayName}
+            onChangeText={setDisplayName}
+          />
+
+          <Text style={styles.label}>Correo</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="julian@example.com"
+            placeholderTextColor="#aaa"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+          />
+
+          <Text style={styles.label}>Numero de Telefono</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="+525512345678"
+            placeholderTextColor="#aaa"
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={(value) => setPhone(sanitizePhoneInput(value))}
+          />
+
+          <Text style={styles.label}>Contrasena</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="********"
+            placeholderTextColor="#aaa"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          <TouchableOpacity
+            style={[styles.button, isSubmitting && styles.buttonDisabled]}
+            onPress={handleSignup}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Registrar</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
       </KeyboardAvoidingView>
-    </TouchableWithoutFeedback>
+    </RootWrapper>
   );
 }
 
@@ -119,8 +179,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f0f6ff',
+  },
+  scrollContent: {
     paddingHorizontal: 28,
     paddingTop: 60,
+    paddingBottom: 40,
   },
   back: {
     marginBottom: 24,
@@ -134,7 +197,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a1a2e',
     textAlign: 'center',
-    marginBottom: 36,
+    marginBottom: 12,
+  },
+  helperText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#667085',
+    textAlign: 'center',
+    marginBottom: 24,
   },
   label: {
     fontSize: 16,

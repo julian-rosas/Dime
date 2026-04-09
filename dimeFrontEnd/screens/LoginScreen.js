@@ -1,6 +1,14 @@
-import React, { useState } from 'react';
+import React, { Fragment, useState } from 'react';
 import {
-  Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, TouchableWithoutFeedback, Keyboard,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { login } from '../services/api';
 
@@ -9,10 +17,12 @@ export default function LoginScreen({ navigation, onAuthenticated }) {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const RootWrapper = Platform.OS === 'web' ? Fragment : TouchableWithoutFeedback;
+  const rootWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss };
 
   const handleLogin = async () => {
     if (!identifier.trim() || !password.trim()) {
-      setError('Escribe tu correo o teléfono y tu contraseña.');
+      setError('Escribe tu correo o telefono y tu contrasena.');
       return;
     }
 
@@ -30,25 +40,28 @@ export default function LoginScreen({ navigation, onAuthenticated }) {
         entryPoint: 'login',
       });
     } catch (err) {
-      setError(err.message || 'No se pudo iniciar sesión.');
+      setError(err.message || 'No se pudo iniciar sesion.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <RootWrapper {...rootWrapperProps}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>← Volver</Text>
+          <Text style={styles.backText}>{'<'} Volver</Text>
         </TouchableOpacity>
 
-        <Text style={styles.title}>Iniciar Sesión</Text>
+        <Text style={styles.title}>Iniciar Sesion</Text>
+        <Text style={styles.helperText}>
+          Entra con el mismo correo o telefono con el que te registraste.
+        </Text>
 
-        <Text style={styles.label}>Correo o Teléfono</Text>
+        <Text style={styles.label}>Correo o Telefono</Text>
         <TextInput
           style={styles.input}
           placeholder="julian@example.com o +525512345678"
@@ -58,10 +71,10 @@ export default function LoginScreen({ navigation, onAuthenticated }) {
           onChangeText={setIdentifier}
         />
 
-        <Text style={styles.label}>Contraseña</Text>
+        <Text style={styles.label}>Contrasena</Text>
         <TextInput
           style={styles.input}
-          placeholder="••••••••"
+          placeholder="********"
           placeholderTextColor="#aaa"
           secureTextEntry
           value={password}
@@ -78,11 +91,11 @@ export default function LoginScreen({ navigation, onAuthenticated }) {
           {isSubmitting ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Iniciar Sesión</Text>
+            <Text style={styles.buttonText}>Iniciar Sesion</Text>
           )}
         </TouchableOpacity>
       </KeyboardAvoidingView>
-    </TouchableWithoutFeedback>
+    </RootWrapper>
   );
 }
 
@@ -105,7 +118,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a1a2e',
     textAlign: 'center',
-    marginBottom: 36,
+    marginBottom: 12,
+  },
+  helperText: {
+    fontSize: 14,
+    color: '#667085',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
   },
   label: {
     fontSize: 16,

@@ -138,6 +138,30 @@ function cleanOptionalNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+function parseDeterministicTransfer(message: string): ParsedIntent | undefined {
+  const normalized = message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const transferMatch = normalized.match(
+    /(?:quiero\s+)?(?:env(?:ia|iar|iarle)?|manda(?:r|rle|le)?|transfiere(?:r|rle)?|deposita(?:r|rle)?|depositarle|depositarie|transferirle|mandarle|darle|enviarle|pasale?|hacerle llegar)\s+\$?([\d,]+(?:\.\d{1,2})?)\s*(?:pesos?|mxn|dolares?|usd)?\s*(?:a|para|al|a nombre de)\s+(.+)/
+  );
+
+  if (!transferMatch) {
+    return undefined;
+  }
+
+  return {
+    type: "transfer",
+    amount: parseFloat(transferMatch[1].replace(/,/g, "")),
+    recipient: transferMatch[2].trim(),
+    confidence: "high",
+  };
+}
+
 function rescueDeterministicIntent(
   intent: ParsedIntent,
   message: string,
@@ -147,7 +171,11 @@ function rescueDeterministicIntent(
     return intent;
   }
 
-  const rescued = validateParsedIntent(fallbackParse(message), message, state);
+  const rescued = validateParsedIntent(
+    parseDeterministicTransfer(message) ?? fallbackParse(message),
+    message,
+    state
+  );
   if (rescued.type !== "unknown" && rescued.type !== "help") {
     return rescued;
   }
@@ -385,6 +413,11 @@ export async function parseIntent(
   if (securityDecision.blocked) {
     console.warn("Mensaje bloqueado por filtro de seguridad:", securityDecision.reason, message);
     return securityDecision.intent;
+  }
+
+  const deterministicTransfer = parseDeterministicTransfer(message);
+  if (deterministicTransfer) {
+    return validateParsedIntent(deterministicTransfer, message, state);
   }
 
   const client = await getClient();
